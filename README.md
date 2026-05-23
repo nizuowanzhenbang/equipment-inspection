@@ -1,181 +1,208 @@
-# 发电厂设备点检与缺陷管理系统 v2.5
+# 电厂设备的数字工长 · 设备点检与缺陷管理系统
 
-围绕「设备台账 → 点检路线 → 点检任务 → 缺陷工单 → 检修闭环」的发电厂设备运维管理系统。
+> ⚙️ 电厂里上千台设备从锅炉到冷却塔，关键设备一停 = 整个机组停。但巡检全靠纸本子、口头交代——谁该巡哪台、几点巡、漏巡了没人盯；发现的小问题（轴温偏高、阀门内漏）没传到检修工那里就忘了；等小问题熬成大故障，已经晚了。
 
-## 项目定位
+**这套系统把电厂上千台设备从"巡 → 修 → 验"串成一条数字闭环**：手机扫设备上的 QR 码就开点检，录入异常自动按设备等级（A/B/C）开缺陷工单；派工、检修、验收走完整状态机，每一步都有人、有时间、有签名；备件领用同步扣库存；`CRITICAL` 缺陷自动推到[安全管理系统](https://github.com/nizuowanzhenbang/plant-safety)立项整改。点检员在矿区/汽机房没信号？离线照样干，回到办公区自动同步。
 
-与 [plant-safety](../plant-safety) 互补：
+> ⚠️ **免责声明**：本系统是 **厂内运维管理工具**，不能替代两票（工作票/操作票）的纸质归档（即便系统支持电子签名也建议保留纸质副本作为合规依据）。
 
-| 维度 | plant-safety | equipment-inspection |
-|---|---|---|
-| 关注点 | 分区 + 风险类别 | 设备台账 + 点检测点 |
-| 核心实体 | 隐患单（YH-xxx） | 设备 + 缺陷单（DF-xxx） |
-| 闭环 | 排查 → 整改 → 复查 | 点检 → 派工 → 检修 → 验收 |
+---
 
-二者通过"设备名/编号"互查；v2.0 起 **CRITICAL 缺陷自动联动建一条 plant-safety 隐患单**（共享 `INTEGRATION_SECRET`，APScheduler 失败重试）。
+## ⚡ 30 秒看明白你能用它做什么
 
-## 技术栈
+| 你是谁 | 它帮你做什么 |
+|---|---|
+| 🧰 设备主管 | 派工、验收、看健康度倒序榜、决定哪台设备进检修 |
+| 👷 点检员 | 手机扫 QR → 录测点 → 上传照片，异常当场建缺陷；离线也能点 |
+| 🔧 维修工 | 接派工 → 开始检修 → 提交修复，自动联动备件领用 |
+| 📦 仓管 | 看低库存预警、做出入库流水、低于安全库存自动建采购申请 |
+| 🏢 设备部主任 | 大屏一眼看完今天的点检完成率、未结缺陷、SLA 达成率 |
 
-- **后端**：FastAPI + SQLAlchemy 2 + Pydantic v2，JWT 鉴权
-- **前端**：React 18 + TypeScript + Ant Design 5 + ECharts + Zustand + Vite
-- **数据库**：SQLite（开发）/ PostgreSQL（生产）
-- **端口**：后端 8003，前端 5175（避开 fuel-procurement 8000/5173、coal-yard 8001/5174）
+---
 
-## 核心模型
+## ✨ 核心场景
 
-7 张表 / 6 个核心实体：
+### 📱 手机扫码点检：3 秒进入录入页
+设备上贴一张 QR 码，点检员手机打开 PWA → 扫码 → 自动拉出该设备的点检项 → 录数 → 拍照 → 提交。不用记编号、不用翻菜单。
 
-1. **User**：5 角色 ADMIN / INSPECTOR / REPAIRMAN / SUPERVISOR / VIEWER
-2. **Equipment**：设备台账，按 8 个系统分类，3 级关键度（A/B/C），QR 码 + 健康度
-3. **InspectionRoute** + **InspectionPoint**：点检路线与测点，路线含频率（班/日/周/月）+ 多个测点 + 每个测点的检查项 JSON
-4. **InspectionTask** + **InspectionRecord**：任务与每测点的检查结果
-5. **Defect**：缺陷工单，状态机闭环 NEW → ASSIGNED → IN_REPAIR → REPAIRED → VERIFIED → CLOSED
+> 💡 **离线也能干**：地下汽机房没信号？记录暂存浏览器 IndexedDB，回到办公区自动同步上传。
 
-## 关键业务规则
-
-### 设备分级与编号
-- 编号 `EQ-{SYS}-NNNN`，系统代码 BL/TB/GN/AX/EL/CH/AS/DS
-- A 级 = 关键设备（停机即停机组），B 级 = 重要，C 级 = 一般
-- 缺陷严重度自动决定：A 级 + SEVERE → CRITICAL，A 级 + ABNORMAL → MAJOR，其他 → MINOR
-
-### 点检异常自动建单
-- 点检员录入 `ABNORMAL` 或 `SEVERE` → 自动生成对应级别缺陷工单
-- `SEVERE` + 设备 RUNNING → 设备自动转 `MAINTENANCE`
-- 健康度衰减：CRITICAL -15、MAJOR -8、MINOR -3
-
-### SLA 与超期
-- MINOR 72 小时 / MAJOR 24 小时 / CRITICAL 4 小时
-- `POST /api/defects/sweep-overdue` 扫描超期单（外挂 cron / 前端按钮触发）
-
-### 缺陷闭环
-- 派工（SUPERVISOR）→ 开始检修（REPAIRMAN）→ 提交修复 → 验收
-- 验收通过 → 设备健康度回弹 + 若无其他未结缺陷 → 设备恢复 RUNNING
-
-## 快速开始
-
-### 后端
-
-```bash
-cd backend
-pip install -r requirements.txt
-python seed_data.py      # 生成 5 用户 + 18 设备 + 3 路线 + 一周任务 + 6 个典型缺陷
-uvicorn app.main:app --port 8003 --reload
+### 🔁 缺陷工单闭环：从异常到关闭，谁干的、几点干的、签了字
+```
+点检异常 → NEW（自动建单）→ ASSIGNED（派工）→ IN_REPAIR（开修）→ REPAIRED（提交）→ VERIFIED（验收关闭）
+                                                                          ↓ 不通过
+                                                                       回到 IN_REPAIR
 ```
 
-### 前端
+- **设备等级 × 测点异常** = 自动决定缺陷严重度
+  | 设备等级 | ABNORMAL | SEVERE |
+  |---|---|---|
+  | A（关键） | MAJOR | CRITICAL |
+  | B（重要） | MINOR | MAJOR |
+  | C（一般） | MINOR | MAJOR |
+
+- **SLA 自动盯**：CRITICAL 4 小时 / MAJOR 24 小时 / MINOR 72 小时，超期飘红 `OVERDUE`
+- **健康度算法**：缺陷扣分（CRITICAL -15、MAJOR -8、MINOR -3），验收回弹，可用率一目了然
+
+### ✍️ 两票电子签名：工作票 / 操作票走完闭环
+- **工作票** `WT-YYYYMMDD-NNNN`：第一种 / 第二种 / 紧急抢修
+  起草 → 签发（设备主管）→ 许可（许可人）→ 开工 → 终结 → 归档
+- **操作票** `OT-YYYYMMDD-NNNN`：停电 / 送电 / 倒闸
+  审核 → 批准 → 逐步执行（每步记录 PASS/FAIL）→ 完成
+- 每个签字节点 **HMAC-SHA256 二次密码**，签名链可一键重算验签
+- 工作票"许可开工"自动转设备 `MAINTENANCE`，"归档"且无其它在工票自动恢复 `RUNNING`
+- 工作票详情可一键 A4 排版打印（浏览器原生 print 即出 PDF）
+
+### 🔮 预测性维护：哪台设备最该重点关注
+综合风险分 = 缺陷数(30%) + CRITICAL 数(25%) + 点检异常(15%) + 健康度衰减(20%) + 设备等级加成 + 状态加成。给每台设备打 0–100 风险分 + 失效概率 + 处置建议，散点图直接看出 Top 30 重点设备。
+
+### 📦 备件闭环 → 采购联动
+- 缺陷 / 工作票 关联备件领用，出库自动扣库存
+- `stock_qty < min_qty` 列表/Dashboard 自动标红
+- **低库存自动批量建采购申请** → 推送到[燃料/物资采购系统](https://github.com/nizuowanzhenbang/fuel-procurement) → 到货后自动入库（StockMovement IN）
+
+### 🔌 联动安全管理系统
+`CRITICAL` 缺陷落库即推送到 [plant-safety](https://github.com/nizuowanzhenbang/plant-safety) 建一条重大隐患单（14 天整改期），失败 5 分钟自动重试，缺陷列表显示联动状态 + 隐患单号。
+
+> 🧩 配 `SAFETY_SYSTEM_URL=http://localhost:8000` + 两侧 `INTEGRATION_SECRET` 一致即可。
+
+---
+
+## 🚀 快速开始
+
+### Docker Compose 一键启动（推荐）
 
 ```bash
+docker compose up -d --build
+# 前端 http://localhost:8080
+# 后端 http://localhost:8003/docs
+# MinIO 控制台 http://localhost:9001（minioadmin/minioadmin）
+# 默认账户 admin / admin123
+```
+
+### 本地开发
+
+```bash
+# 后端
+cd backend
+pip install -r requirements.txt
+python seed_data.py      # 5 用户 + 18 设备 + 3 路线 + 一周任务 + 6 个典型缺陷
+uvicorn app.main:app --port 8003 --reload
+
+# 前端
 cd frontend
 npm install
 npm run dev              # http://localhost:5175
 ```
 
-### 默认账户
+## 🔐 默认账户
 
 | 用户名 | 密码 | 角色 |
 |---|---|---|
-| admin | admin123 | 管理员（全部） |
-| inspector | inspector123 | 点检员（任务/录入） |
-| repairman | repairman123 | 维修工（检修） |
-| supervisor | supervisor123 | 设备主管（派工/验收） |
-| viewer | viewer123 | 只读 |
+| `admin` | `admin123` | 管理员（全部） |
+| `inspector` | `inspector123` | 点检员（任务/录入） |
+| `repairman` | `repairman123` | 维修工（检修） |
+| `supervisor` | `supervisor123` | 设备主管（派工/验收） |
+| `viewer` | `viewer123` | 只读 |
 
-## API 全景
+> 🔒 生产部署请务必删掉 seed 用户、改强密码、关掉 `--reload`。
 
-| 路由 | 说明 |
+---
+
+## 📋 业务规则速查
+
+| 项 | 规则 |
 |---|---|
-| `POST /api/auth/login` | 登录获取 JWT |
-| `GET /api/equipments` + `POST/PUT` | 设备 CRUD + 转检修/恢复 |
-| `GET /api/routes` + `POST` | 路线与测点管理 |
-| `GET /api/tasks` + `POST /generate` + `POST /{id}/records` | 任务生成与录入 |
-| `POST /api/tasks/sweep-missed` | 扫描漏检任务 |
-| `GET /api/defects` + `POST /assign /repair /verify` | 缺陷工单闭环 |
-| `POST /api/defects/sweep-overdue` | 扫描超期缺陷 |
-| `POST /api/defects/{id}/safety-sync` | 手动重推 plant-safety 联动（v2） |
-| `GET /api/dashboard/*` | 5 个看板接口 |
-| `GET /api/reports/monthly` / `equipment-availability` | 月度/可用率报表（v2） |
-| `GET /api/reports/equipments/export` / `defects/export` | CSV 导出（v2） |
-| `GET /api/scheduler/jobs` / `POST /api/scheduler/run/{id}` | 调度器查看 + 手动触发（v2） |
-| `POST /api/uploads` | 文件上传（≤5MB，图片/PDF），返回 `/uploads/...` URL（v2.1） |
-| `WS /ws?token=...` | WebSocket 推送 CRITICAL/OVERDUE/MISSED/联动事件（v2.1） |
-| `GET /api/equipments/by-code/{code}` | 按设备编号或 QR 内容查（v2.2） |
-| `GET/POST /api/work-tickets` + 流转 `/submit /issue /permit /complete /close /cancel` | 工作票全闭环（v2.2） |
-| `POST /api/work-tickets/{id}/check-safety?step_seq=N` | 安全措施逐条勾选（v2.2） |
-| `GET/POST /api/operation-tickets` + 流转 `/review /approve /start /execute-step /cancel` | 操作票 + 逐步执行（v2.2） |
-| `GET /api/predictive/ranking` | 预测性维护风险榜 Top N（v2.2） |
-| `GET /api/spare-parts` + 流水 + `/stats/overview` | 备品备件 + 出入库 + 低库存预警（v2.3） |
-| `GET /api/equipments/{id}/profile` | 设备 360 全景（v2.3） |
-| `GET/POST /api/users` + 流转 `/{id}/reset-password /toggle-active` | 用户管理（ADMIN-only，v2.4） |
-| `GET/POST /api/operation-tickets/templates` + `/from-ticket/{oid}` + `DELETE /{tid}` | 操作票模板（v2.4） |
-| `GET /api/equipments/{id}/qr.svg` | 设备 QR 码 SVG（v2.5） |
-| `GET /api/audit` | 审计日志（ADMIN-only，v2.5） |
+| 设备分级 | A 关键 / B 重要 / C 一般 |
+| 设备状态 | RUNNING ⇄ STANDBY / MAINTENANCE → DECOMMISSIONED |
+| SLA | MINOR 72h / MAJOR 24h / CRITICAL 4h |
+| 健康度 | 初始 100，缺陷扣分（-3 / -8 / -15），验收回弹 |
+| 编号规则 | 设备 `EQ-{SYS}-NNNN` / 任务 `TK-YYYYMMDD-NNNN` / 缺陷 `DF-YYYYMMDD-NNNN` / 工作票 `WT-YYYYMMDD-NNNN` / 操作票 `OT-YYYYMMDD-NNNN` |
 
-## Dashboard 看点
+---
 
-1. **4 KPI**：设备总数 / 今日点检完成率 / 待处理缺陷 / 平均健康度
-2. **缺陷趋势**：近 30 天新增 vs 关闭
-3. **系统分布**：8 个系统的设备数 + 未关缺陷柱状对比
-4. **高发故障设备 TOP 5**：30 天缺陷数倒序
-5. **健康度倒序榜**：A 级优先 + 健康度倒序
+## 🛠️ 技术栈
 
-## v2.0 新增
+| 层 | 选型 |
+|---|---|
+| 后端 | FastAPI · SQLAlchemy 2 · Pydantic v2 · APScheduler · JWT · boto3 · segno |
+| 前端 | React 18 · TypeScript · Ant Design 5 · ECharts · Zustand · Vite · PWA(SW + IndexedDB) |
+| 数据 | SQLite（开发）/ PostgreSQL 16（生产） |
+| 存储 | 本地 disk / S3 / MinIO / 阿里云 OSS 可切换 |
+| 端口 | 后端 `8003` / 前端 `5175`（容器 `8080`） |
 
-- **内置 APScheduler 调度器**：4 个 job（缺陷超期扫描 10min / 漏检扫描 30min / 自动生成任务 60min / 联动重试 5min），lifespan 启停，无需外挂 cron
-- **plant-safety 联动**：CRITICAL 缺陷落库即推送，失败自动重试，缺陷列表显示联动状态 + 隐患单号
-- **CSV 导出**：设备台账全量 / 缺陷工单按时间范围（UTF-8 BOM，Excel 直开）
-- **报表页面**：6 个月新增/关闭/SLA 达成率/平均处理时长趋势 + 各系统设备可用率 + 调度器状态面板
-- **缺陷列表"重推隐患"按钮**：失败的联动可手工补推
+## 📁 核心模型（14 张表）
 
-## v2.1 新增
+`User · Equipment · InspectionRoute · InspectionPoint · InspectionTask · InspectionRecord · Defect · WorkTicket · OperationTicket · OperationTicketTemplate · SparePart · StockMovement · PurchaseRequest · AuditLog`
 
-- **照片真上传**：`POST /api/uploads` 本地 disk 存储，缺陷上报 + 测点录入均换成 antd Upload 组件
-- **WebSocket 实时推送**：CRITICAL 缺陷新建、缺陷超期、任务漏检、联动成功/失败全推到前端 notification
-- **WS 连接管理**：自动重连（指数退避，鉴权失败不重试），ConnectionManager 跨线程 emit
-- **seed_data v2**：示例缺陷加 SYNCED/FAILED/PENDING/SKIPPED 联动状态，报表/列表演示更直观
+---
 
-## v2.2 新增
+## 🔗 智慧发电厂全家桶中的位置
 
-- **两票管理**：工作票（第一种/第二种/紧急抢修）+ 操作票（停电/送电/倒闸），全状态机闭环，与缺陷工单挂钩
-- **工作票联动设备**：许可开工自动转设备 MAINTENANCE；收票归档时若无其它在工票自动恢复 RUNNING
-- **操作票分步执行**：每步可单独记录 PASS/FAIL 结果，全部完成自动标 COMPLETED
-- **预测性维护**：基于近 90 天缺陷/紧急/点检异常/健康度/等级的综合风险算法，给每台设备打 0–100 风险分 + 失效概率 + 处置建议
-- **PWA + QR 扫码点检**：manifest + service worker + 安装到主屏幕；`/m/scan` 移动端扫码页（用浏览器原生 BarcodeDetector + 手动输入降级），扫到 QR → 拉设备 → 上报缺陷一气呵成
-- **风险散点图**：健康度 × 风险分散点（颜色=等级，大小=A/B/C）+ Top 30 重点关注表
+本项目是 [smart-power-plant](https://github.com/nizuowanzhenbang/smart-power-plant) 七大子系统中的"设备运维"模块，已对接：
 
-## v2.3 新增
+| 系统 | 关系 |
+|---|---|
+| [plant-safety](https://github.com/nizuowanzhenbang/plant-safety) | `CRITICAL` 缺陷 → 推送重大隐患单（已实现） |
+| [fuel-procurement](https://github.com/nizuowanzhenbang/fuel-procurement) | 备件采购申请 → 推送物资采购单（已实现） |
+| [emission-monitoring](https://github.com/nizuowanzhenbang/emission-monitoring) | CEMS `FAULT` → 自动建点检缺陷（v3.1 规划） |
 
-- **备品备件管理**：SparePart + StockMovement，出入库/盘点流水，与缺陷/工作票关联领用，安全库存预警
-- **设备 360 全景**：`/api/equipments/{id}/profile` 聚合 90 天点检 + 缺陷 + 工作票 + 备件耗用 + 风险评分
-- **Dashboard 整合 v2.2+ 数据**：在工工作票 / 执行中操作票 / 低库存预警 3 张联动卡片
-- **缺陷一键开工作票**：缺陷列表"工作票"按钮带 defect_id 自动跳转并预填起草表单
-- **工作票打印视图**：`/work-tickets/{id}/print` A4 友好排版，浏览器原生 print() 即可输出 PDF
-- **plant-safety v1.1 接收接口**：CRITICAL 缺陷自动落隐患单，X-Integration-Secret 鉴权 + 幂等去重，本系列首个跨系统真闭环 ✅
+---
 
-## v2.4 新增
+## 🚧 路线图（已实现 + 规划）
 
-- **用户管理**：ADMIN 可 CRUD 用户 + 重置密码 + 启用/禁用；不可禁用自己或内置 admin
-- **操作票模板库**：常用倒闸序列保存为模板，新建操作票时下拉一键复用；详情可"另存为模板"，模板有使用次数计数（自然冷热分层）
+详细版本变更见下方分段，简要：
 
-## v2.5 新增
+- ✅ **v1.0**：设备 + 路线 + 任务 + 缺陷工单全闭环
+- ✅ **v2.0**：APScheduler 定时调度 + plant-safety 联动 + CSV 报表
+- ✅ **v2.1**：照片真上传 + WebSocket 实时推送
+- ✅ **v2.2**：两票管理 + 预测性维护 + PWA 扫码
+- ✅ **v2.3**：备品备件 + 设备 360 全景 + 工作票打印
+- ✅ **v2.4**：用户管理 + 操作票模板
+- ✅ **v2.5**：QR 批量打印 + 审计日志
+- ✅ **v3.0**：对象存储 + 两票电子签名 + PWA 离线点检 + 备件采购联动 + Docker Compose
+- 🚧 **v3.1**：与 emission-monitoring 联动 + 健康度时间加权 + WebSocket Redis pubsub
 
-- **设备 QR 码**：后端用 segno 生成 SVG，前端 `/equipment-qr-print` 批量打印页（A4 4 列网格，浏览器原生 print()）
-- **MobileScan 闭环**：上面打印的 QR 内容是 `EQ::CODE`，可直接用 `/m/scan` 移动页扫
-- **审计日志**：AuditLog 表 + `app/utils/audit.log()` 一行打点工具
-- 已接入关键写操作：上报缺陷、派工、验收通过/驳回、工作票签发/许可/归档、创建用户、重置密码
-- ADMIN 可在"审计日志"菜单看到全部记录，支持单号/摘要关键词检索
+<details>
+<summary>📜 各版本详细变更（点击展开）</summary>
 
-## 与 plant-safety 联动 quick-start
+### v2.0
+- 内置 APScheduler（4 个 job：超期扫描 / 漏检扫描 / 任务自动生成 / 联动重试）
+- plant-safety 联动 + 失败重试
+- CSV 导出 + 月度报表页面 + 调度器状态面板
 
-1. 启动 plant-safety v1.1+：`cd plant-safety/backend && uvicorn app.main:app --port 8000`
-2. 启动 equipment-inspection 时配 `SAFETY_SYSTEM_URL=http://localhost:8000`（可写入 `backend/.env`）
-3. 两侧 `INTEGRATION_SECRET` 必须一致（默认 `coal-integration-shared-secret`）
-4. 测试：在 equipment-inspection 上报一条 CRITICAL 缺陷 → plant-safety 会自动生成一条 MAJOR 隐患单，且 Defect.safety_hazard_no 被写回
-5. 失败时调度器 `retry_safety_sync` 每 5 分钟自动重试
+### v2.1
+- 照片真上传（本地 disk）
+- WebSocket 实时推送 CRITICAL / OVERDUE / MISSED / 联动事件
 
-## 已知简化（v3+ 规划）
+### v2.2
+- 工作票 + 操作票全闭环（关联缺陷工单，许可开工自动转设备状态）
+- 预测性维护风险算法 + 散点图
+- PWA + QR 扫码点检（BarcodeDetector + 手动输入降级）
 
-- 上传仅本地 disk（v3 加 S3/OSS）
-- 设备可用率为快照口径（基于当前 RUNNING 比例），非时间加权
-- 健康度算法为线性估算
-- WebSocket 单进程内存，多实例需 Redis pubsub
-- BarcodeDetector 仅 Chromium 系移动端支持，iOS Safari 暂走手动输入
+### v2.3
+- 备品备件 + 出入库流水 + 低库存预警
+- 设备 360 全景（90 天点检 + 缺陷 + 工作票 + 备件耗用）
+- 工作票 A4 打印视图
+- plant-safety v1.1 接收接口（首个跨系统真闭环）
+
+### v2.4
+- 用户管理（ADMIN-only CRUD + 重置密码 + 启停）
+- 操作票模板库
+
+### v2.5
+- 设备 QR 批量打印页（segno SVG，A4 4 列网格）
+- 审计日志（关键写操作打点）
+
+### v3.0
+- 对象存储抽象（S3 / MinIO / OSS）+ 预签名 URL
+- 两票电子签名（HMAC-SHA256 + 二次密码 + 签名链验签）
+- PWA 离线点检（IndexedDB 队列 + 自动同步）
+- 备件采购申请闭环（手工 + 低库存自动）→ fuel-procurement 联动
+- Docker Compose 一键启动（4 服务）
+
+</details>
+
+## 📜 License
+
+私有项目，未开源。
