@@ -1,0 +1,99 @@
+version: '3.9'
+
+# 发电厂设备点检与缺陷管理系统 v3.0 全栈编排
+# - backend: FastAPI (8003)
+# - frontend: nginx + React build (8080 → :80)
+# - postgres: 生产数据库
+# - minio: S3 兼容对象存储（用于 v3.0 上传）
+#
+# 启动：docker compose up -d --build
+# 默认账户：admin / admin123（见 backend/app/main.py:_create_default_users）
+
+services:
+  backend:
+    build: ./backend
+    container_name: eq-inspect-backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://eq:eqpass@postgres:5432/equipment_inspection
+      SECRET_KEY: change-me-in-production
+      DEBUG: "false"
+      # plant-safety 联动（如果同机部署，可改成 http://plant-safety-backend:8002）
+      SAFETY_SYSTEM_URL: ""
+      INTEGRATION_SECRET: coal-integration-shared-secret
+      # 对象存储（MinIO）
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: equipment-inspection
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_FORCE_PATH_STYLE: "true"
+      # 备件采购对接（fuel-procurement 在同一 docker network 内可直连）
+      PROCUREMENT_SYSTEM_URL: ""
+      PROCUREMENT_INTEGRATION_TOKEN: coal-integration-shared-secret
+      # 调度器
+      SCHEDULER_ENABLED: "true"
+    ports:
+      - "8003:8003"
+    volumes:
+      - eq_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: eq-inspect-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: eq-inspect-postgres
+    environment:
+      POSTGRES_USER: eq
+      POSTGRES_PASSWORD: eqpass
+      POSTGRES_DB: equipment_inspection
+    volumes:
+      - eq_pgdata:/var/lib/postgresql/data
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eq -d equipment_inspection"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: eq-inspect-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Web console
+    volumes:
+      - eq_minio:/data
+    restart: unless-stopped
+
+  # ----- 可选：plant-safety 同栈编排（取消注释即同机一起跑）-----
+  # plant-safety:
+  #   image: plant-safety:latest    # 或 build: ../plant-safety
+  #   container_name: plant-safety-backend
+  #   ports:
+  #     - "8002:8002"
+  #   environment:
+  #     INTEGRATION_SECRET: coal-integration-shared-secret
+
+volumes:
+  eq_uploads:
+  eq_pgdata:
+  eq_minio:

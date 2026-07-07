@@ -13,7 +13,7 @@ import {
   SEVERITY_LABEL, DEFECT_STATUS_LABEL, WT_STATUS_LABEL, WT_TYPE_LABEL,
 } from '../types'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 const { Search } = Input
 
@@ -121,8 +121,8 @@ export default function EquipmentList() {
             render: (_: any, r: Equipment) => (
               <Space size="small">
                 <Button size="small" icon={<EyeOutlined />} onClick={() => openProfile(r.id)}>详情</Button>
-                {writable && r.status === 'RUNNING' && <Button size="small" onClick={async () => { await equipmentApi.toMaintenance(r.id); message.success('已转检修'); load() }}>转检修</Button>}
-                {writable && (r.status === 'MAINTENANCE' || r.status === 'STANDBY') && <Button size="small" type="primary" onClick={async () => { await equipmentApi.restore(r.id); message.success('已恢复'); load() }}>恢复</Button>}
+{writable && r.status === 'RUNNING' && <Button size="small" onClick={async () => { await equipmentApi.toMaintenance(r.id); message.success('已转检修'); load() }}>转检修</Button>}
+{writable && (r.status === 'MAINTENANCE' || r.status === 'STANDBY') && <Button size="small" type="primary" onClick={async () => { await equipmentApi.restore(r.id); message.success('已恢复'); load() }}>恢复</Button>}
               </Space>
             ),
           },

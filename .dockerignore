@@ -1,0 +1,10 @@
+**/__pycache__
+**/node_modules
+**/dist
+**/.venv
+**/.env
+**/*.db
+**/.git
+**/.idea
+**/.vscode
+**/uploads

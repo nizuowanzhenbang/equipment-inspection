@@ -1,8 +1,7 @@
 /**
  * 移动端扫码 + 快速上报缺陷页
  * - 用浏览器原生 BarcodeDetector（Chrome/Edge 移动端支持）扫 QR
- * - 不支持时给手动输入 code 的入口
- * - 扫到 `EQ::CODE` 或纯 CODE → 拉设备信息 → 选缺陷等级 → 上传照片 → 提交
+ * - 不支持时给手动输入 code 的入口；扫到 `EQ::CODE` 或纯 CODE -> 拉设备信息 -> 选缺陷等级 -> 上传照片 -> 提交
  */
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -10,7 +9,7 @@ import {
 } from 'antd'
 import { ScanOutlined, UploadOutlined, ReloadOutlined } from '@ant-design/icons'
 import { equipmentApi, defectApi, uploadApi, authApi } from '../api'
-import type { Equipment, DefectSeverity } from '../types'
+import type { Equipment } from '../types'
 import { SEVERITY_LABEL, SYSTEM_LABEL, EquipmentSystem } from '../types'
 
 const { Title, Text, Paragraph } = Typography
@@ -56,7 +55,7 @@ export default function MobileScan() {
     try {
       const res = await authApi.login(v.username, v.password)
       localStorage.setItem('token', res.access_token)
-      // 也拉一下 me 以保存角色（可选）
+      // 也拉一次 me 以保存角色（可选）
       try {
         const me: any = await authApi.me()
         if (me?.data) {
@@ -178,7 +177,7 @@ export default function MobileScan() {
             <Button type="primary" block loading={loggingIn} onClick={doLogin} size="large">登录</Button>
           </Form>
           <Paragraph type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
-            提示：点检员请用 inspector / inspector123 登录。建议加到主屏幕（Safari → 分享 → 添加到主屏幕；Chrome → 三点菜单 → 安装应用）。
+            提示：点检员请用 inspector / inspector123 登录。建议加到主屏幕（Safari -&gt; 分享 -&gt; 添加到主屏幕；Chrome -&gt; 三点菜单 -&gt; 安装应用）。
           </Paragraph>
         </Card>
       </div>
@@ -259,7 +258,7 @@ export default function MobileScan() {
                 </Form.Item>
                 <Form.Item name="severity" label="严重程度" rules={[{ required: true }]}>
                   <Select size="large" options={Object.entries(SEVERITY_LABEL).map(([k, v]) => ({
-                    label: `${v}${k === 'CRITICAL' ? '（4 小时 SLA）' : k === 'MAJOR' ? '（24 小时 SLA）' : '（72 小时 SLA）'}`,
+                    label: `${v}${k === 'CRITICAL' ? '（1 小时 SLA）' : k === 'MAJOR' ? '（4 小时 SLA）' : '（72 小时 SLA）'}`,
                     value: k,
                   }))} />
                 </Form.Item>
@@ -295,7 +294,7 @@ export default function MobileScan() {
       </Card>
 
       <Paragraph type="secondary" style={{ marginTop: 12, textAlign: 'center', fontSize: 12 }}>
-        当前用户：{localStorage.getItem('username')} ｜ <a onClick={() => { localStorage.clear(); setAuthed(false) }}>退出</a>
+        当前用户：{localStorage.getItem('username')} · <a onClick={() => { localStorage.clear(); setAuthed(false) }}>退出</a>
       </Paragraph>
     </div>
   )

@@ -67,6 +67,9 @@ class WorkTicket(Base):
     approval_notes = Column(Text, nullable=True, comment="签发备注")
     closing_notes = Column(Text, nullable=True, comment="收票备注")
 
+    # v3.0 电子签名（JSON 数组：[{stage, signer, signed_at, sig_hash, ip}]）
+    signatures = Column(JSON, nullable=True, comment="签名链：issue/permit/close 等阶段")
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -130,6 +133,10 @@ class OperationTicket(Base):
     completed_at = Column(DateTime, nullable=True)
 
     notes = Column(Text, nullable=True)
+
+    # v3.0 电子签名链
+    signatures = Column(JSON, nullable=True, comment="签名链：review/approve/complete 等阶段")
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

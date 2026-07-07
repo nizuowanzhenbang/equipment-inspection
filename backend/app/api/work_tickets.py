@@ -13,10 +13,11 @@ from app.models.ticket import WorkTicket, WorkTicketStatus, WorkTicketType
 from app.models.user import User
 from app.schemas.ticket import (
     WorkTicketCreate, WorkTicketUpdate, WorkTicketIssue,
-    WorkTicketPermit, WorkTicketComplete, WorkTicketResponse,
+    WorkTicketPermit, WorkTicketComplete, WorkTicketClose, WorkTicketResponse,
 )
 from app.utils.helpers import api_response, paginate_response, generate_work_ticket_no
 from app.utils.audit import log as audit_log
+from app.utils.signature import assert_password, append_signature, make_signature, verify_signature
 
 router = APIRouter(prefix="/api/work-tickets", tags=["工作票"])
 
@@ -138,15 +139,18 @@ def issue(wid: int, payload: WorkTicketIssue, db: Session = Depends(get_db), cur
         raise HTTPException(404, "工作票不存在")
     if w.status != WorkTicketStatus.SUBMITTED:
         raise HTTPException(400, f"状态 {w.status.value} 不可签发")
+    assert_password(current, payload.signature_password)
     w.status = WorkTicketStatus.ISSUED
     w.issuer = current.username
     w.issued_at = datetime.utcnow()
     w.approval_notes = payload.approval_notes
+    sig = make_signature(w.ticket_no, "issue", current.username)
+    w.signatures = append_signature(w.signatures, sig)
     audit_log(db, actor=current.username, action="wt.issue",
               target_type="WorkTicket", target_id=w.id, target_no=w.ticket_no,
-              summary=f"签发：{w.work_content[:60]}")
+              summary=f"签发：{w.work_content[:60]}（sig {sig['sig_hash'][:8]}）")
     db.commit()
-    return api_response(message="已签发")
+    return api_response(message="已签发", data={"signature": sig})
 
 
 @router.post("/{wid}/permit")
@@ -157,6 +161,7 @@ def permit(wid: int, payload: WorkTicketPermit, db: Session = Depends(get_db), c
         raise HTTPException(404, "工作票不存在")
     if w.status != WorkTicketStatus.ISSUED:
         raise HTTPException(400, f"状态 {w.status.value} 不可许可")
+    assert_password(current, payload.signature_password)
     w.status = WorkTicketStatus.IN_WORK
     w.permitter = payload.permitter or current.username
     w.permitted_at = datetime.utcnow()
@@ -164,11 +169,13 @@ def permit(wid: int, payload: WorkTicketPermit, db: Session = Depends(get_db), c
     # 设备转检修
     if w.equipment and w.equipment.status == EquipmentStatus.RUNNING:
         w.equipment.status = EquipmentStatus.MAINTENANCE
+    sig = make_signature(w.ticket_no, "permit", current.username)
+    w.signatures = append_signature(w.signatures, sig)
     audit_log(db, actor=current.username, action="wt.permit",
               target_type="WorkTicket", target_id=w.id, target_no=w.ticket_no,
-              summary=f"许可开工 → {w.equipment.code if w.equipment else ''} 转检修")
+              summary=f"许可开工 → {w.equipment.code if w.equipment else ''} 转检修（sig {sig['sig_hash'][:8]}）")
     db.commit()
-    return api_response(message="已许可，作业开始")
+    return api_response(message="已许可，作业开始", data={"signature": sig})
 
 
 @router.post("/{wid}/complete")
@@ -179,24 +186,30 @@ def complete(wid: int, payload: WorkTicketComplete, db: Session = Depends(get_db
         raise HTTPException(404, "工作票不存在")
     if w.status != WorkTicketStatus.IN_WORK:
         raise HTTPException(400, f"状态 {w.status.value} 不可终结")
+    assert_password(current, payload.signature_password)
     w.status = WorkTicketStatus.COMPLETED
     w.actual_end = datetime.utcnow()
     w.completed_at = datetime.utcnow()
     w.closing_notes = payload.closing_notes
+    sig = make_signature(w.ticket_no, "complete", current.username)
+    w.signatures = append_signature(w.signatures, sig)
     db.commit()
-    return api_response(message="工作终结")
+    return api_response(message="工作终结", data={"signature": sig})
 
 
 @router.post("/{wid}/close")
-def close_ticket(wid: int, db: Session = Depends(get_db), current: User = Depends(require_supervisor)):
+def close_ticket(wid: int, payload: WorkTicketClose, db: Session = Depends(get_db), current: User = Depends(require_supervisor)):
     """收票归档：设备如无其他未结缺陷/票则恢复运行"""
     w = db.query(WorkTicket).options(joinedload(WorkTicket.equipment)).filter(WorkTicket.id == wid).first()
     if not w:
         raise HTTPException(404, "工作票不存在")
     if w.status != WorkTicketStatus.COMPLETED:
         raise HTTPException(400, f"状态 {w.status.value} 不可归档")
+    assert_password(current, payload.signature_password)
     w.status = WorkTicketStatus.CLOSED
     w.closed_at = datetime.utcnow()
+    sig = make_signature(w.ticket_no, "close", current.username)
+    w.signatures = append_signature(w.signatures, sig)
     # 设备恢复运行（如无其他未结工作票）
     if w.equipment and w.equipment.status == EquipmentStatus.MAINTENANCE:
         other = (
@@ -212,9 +225,24 @@ def close_ticket(wid: int, db: Session = Depends(get_db), current: User = Depend
             w.equipment.status = EquipmentStatus.RUNNING
     audit_log(db, actor=current.username, action="wt.close",
               target_type="WorkTicket", target_id=w.id, target_no=w.ticket_no,
-              summary=f"收票归档：{w.work_content[:60]}")
+              summary=f"收票归档：{w.work_content[:60]}（sig {sig['sig_hash'][:8]}）")
     db.commit()
-    return api_response(message="工作票已收回归档")
+    return api_response(message="工作票已收回归档", data={"signature": sig})
+
+
+@router.get("/{wid}/signatures/verify")
+def verify_signatures(wid: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """重算 HMAC 校验签名链是否被篡改"""
+    w = db.query(WorkTicket).filter(WorkTicket.id == wid).first()
+    if not w:
+        raise HTTPException(404, "工作票不存在")
+    chain = list(w.signatures or [])
+    results = [
+        {**entry, "valid": verify_signature(entry, w.ticket_no)}
+        for entry in chain
+    ]
+    all_ok = all(r["valid"] for r in results) if results else True
+    return api_response(data={"ticket_no": w.ticket_no, "all_valid": all_ok, "signatures": results})
 
 
 @router.post("/{wid}/cancel")

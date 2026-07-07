@@ -3,7 +3,7 @@ import {
   DashboardOutlined, ToolOutlined, NodeIndexOutlined,
   AuditOutlined, BugOutlined, LogoutOutlined, SafetyCertificateOutlined,
   BarChartOutlined, FileTextOutlined, OrderedListOutlined, ThunderboltOutlined,
-  AppstoreOutlined, UserOutlined,
+  AppstoreOutlined, UserOutlined, CloudUploadOutlined, ShoppingCartOutlined,
 } from '@ant-design/icons'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, ROLE_LABEL } from '../stores/auth'
@@ -28,6 +28,8 @@ export default function Layout() {
     { key: '/operation-tickets', icon: <OrderedListOutlined />, label: '操作票' },
     { key: '/predictive', icon: <ThunderboltOutlined />, label: '预测维护' },
     { key: '/spare-parts', icon: <AppstoreOutlined />, label: '备品备件' },
+    { key: '/purchase-requests', icon: <ShoppingCartOutlined />, label: '采购申请' },
+    { key: '/offline', icon: <CloudUploadOutlined />, label: '离线队列' },
     { key: '/reports', icon: <BarChartOutlined />, label: '报表导出' },
     ...(role === 'ADMIN' ? [
       { key: '/users', icon: <UserOutlined />, label: '用户管理' },

@@ -3,10 +3,11 @@ import {
   Card, Table, Tag, Button, Space, Select, Modal, Form, Input, message,
   Drawer, Descriptions, List, Divider, Typography, Steps,
 } from 'antd'
-import { OrderedListOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons'
+import { OrderedListOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, SafetyCertificateOutlined, AuditOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { opTicketApi, workTicketApi, equipmentApi } from '../api'
-import type { OperationTemplate } from '../api'
+import type { OperationTemplate, SignatureEntry, SignatureVerifyResult } from '../api'
+import SignatureModal from '../components/SignatureModal'
 import { useAuthStore, canInspect, canSupervise, canWrite } from '../stores/auth'
 import type {
   OperationTicket, OperationTicketStatus, OperationTicketType, OperationStep,
@@ -43,6 +44,9 @@ export default function OperationTicketList() {
   const [templates, setTemplates] = useState<OperationTemplate[]>([])
   const [saveTplOpen, setSaveTplOpen] = useState(false)
   const [saveTplForm] = Form.useForm()
+  const [sigStage, setSigStage] = useState<'review' | 'approve' | 'step' | null>(null)
+  const [verifyResult, setVerifyResult] = useState<SignatureVerifyResult | null>(null)
+  const [verifyOpen, setVerifyOpen] = useState(false)
 
   const reloadTemplates = () => opTicketApi.listTemplates().then((r) => setTemplates(r.data))
 
@@ -129,13 +133,42 @@ export default function OperationTicketList() {
 
   const submitStep = async () => {
     const v = await stepForm.validateFields()
+    if (!v.signature_password) { message.error('请输入签名密码'); return }
     try {
-      await opTicketApi.executeStep(detail!.id, currentStep!.seq, v.result, v.notes)
-      message.success('步骤已记录')
+      await opTicketApi.executeStep(detail!.id, currentStep!.seq, v.result, v.notes, v.signature_password)
+      message.success('步骤已记录（已签名）')
       setStepOpen(false); stepForm.resetFields()
       reloadDetail(detail!.id)
       load()
     } catch (e: any) { message.error(e?.detail || '失败') }
+  }
+
+  const handleSignedAction = async (password: string, _extra: Record<string, any>) => {
+    if (!detail || !sigStage) return
+    try {
+      if (sigStage === 'review') {
+        await opTicketApi.review(detail.id, password)
+        message.success('已审核')
+      } else if (sigStage === 'approve') {
+        await opTicketApi.approve(detail.id, password)
+        message.success('已批准')
+      }
+      setSigStage(null)
+      reloadDetail(detail.id)
+      load()
+    } catch (e: any) {
+      message.error(e?.detail || '签名失败')
+      throw e
+    }
+  }
+
+  const verifyChain = async () => {
+    if (!detail) return
+    try {
+      const res = await opTicketApi.verifySignatures(detail.id)
+      setVerifyResult(res.data)
+      setVerifyOpen(true)
+    } catch (e: any) { message.error(e?.detail || '校验失败') }
   }
 
   const statusTag = (s: OperationTicketStatus) => {
@@ -286,10 +319,10 @@ export default function OperationTicketList() {
             <Divider orientation="left">流转</Divider>
             <Space wrap>
               {supervisor && detail.status === 'DRAFT' && (
-                <Button onClick={() => transition(() => opTicketApi.review(detail.id), '已审核')}>审核</Button>
+                <Button icon={<SafetyCertificateOutlined />} onClick={() => setSigStage('review')}>审核（签名）</Button>
               )}
               {supervisor && detail.status === 'REVIEWED' && (
-                <Button type="primary" onClick={() => transition(() => opTicketApi.approve(detail.id), '已批准')}>批准</Button>
+                <Button type="primary" icon={<SafetyCertificateOutlined />} onClick={() => setSigStage('approve')}>批准（签名）</Button>
               )}
               {inspector && detail.status === 'APPROVED' && (
                 <Button type="primary" onClick={() => transition(() => opTicketApi.start(detail.id), '开始执行')}>开始执行</Button>
@@ -298,9 +331,60 @@ export default function OperationTicketList() {
                 <Button danger onClick={() => transition(() => opTicketApi.cancel(detail.id), '已取消')}>作废</Button>
               )}
             </Space>
+
+            <Divider orientation="left">签名链 <Button size="small" icon={<AuditOutlined />} onClick={verifyChain}>校验</Button></Divider>
+            <List
+              size="small"
+              bordered
+              dataSource={(detail.signatures as SignatureEntry[]) || []}
+              locale={{ emptyText: '尚未签名' }}
+              renderItem={(s) => (
+                <List.Item>
+                  <Tag color="purple">{s.stage}</Tag>
+                  <Text strong style={{ marginRight: 8 }}>{s.signer}</Text>
+                  <Text type="secondary" style={{ marginRight: 8 }}>{dayjs(s.signed_at).format('MM-DD HH:mm:ss')}</Text>
+                  <Text code style={{ fontSize: 11 }}>{s.sig_hash.slice(0, 16)}…</Text>
+                </List.Item>
+              )}
+            />
           </>
         )}
       </Drawer>
+
+      <SignatureModal
+        open={sigStage === 'review' || sigStage === 'approve'}
+        title={sigStage === 'review' ? '审核操作票（电子签名）' : '批准操作票（电子签名）'}
+        stage={sigStage || ''}
+        onCancel={() => setSigStage(null)}
+        onConfirm={handleSignedAction}
+      />
+
+      <Modal
+        open={verifyOpen}
+        title="操作票签名链校验"
+        footer={null}
+        onCancel={() => setVerifyOpen(false)}
+        width={600}
+      >
+        {verifyResult && (
+          <>
+            <Tag color={verifyResult.all_valid ? 'green' : 'red'} style={{ marginBottom: 12 }}>
+              {verifyResult.all_valid ? '✓ 所有签名有效' : '✗ 检测到无效签名'}
+            </Tag>
+            <List
+              dataSource={verifyResult.signatures}
+              renderItem={(s) => (
+                <List.Item>
+                  <Tag color={s.valid ? 'green' : 'red'}>{s.valid ? '✓' : '✗'}</Tag>
+                  <Tag>{s.stage}</Tag>
+                  <Text>{s.signer}</Text>
+                  <Text type="secondary" style={{ marginLeft: 8 }}>{dayjs(s.signed_at).format('YYYY-MM-DD HH:mm:ss')}</Text>
+                </List.Item>
+              )}
+            />
+          </>
+        )}
+      </Modal>
 
       <Modal title="另存为操作模板" open={saveTplOpen} onOk={onSaveAsTemplate} onCancel={() => setSaveTplOpen(false)}>
         <Form form={saveTplForm} layout="vertical">
@@ -311,8 +395,8 @@ export default function OperationTicketList() {
         </Form>
       </Modal>
 
-      <Modal title={currentStep ? `执行步骤 ${currentStep.seq}：${currentStep.action}` : '执行'}
-        open={stepOpen} onOk={submitStep} onCancel={() => setStepOpen(false)}>
+      <Modal title={currentStep ? `执行步骤 ${currentStep.seq}：${currentStep.action}（电子签名）` : '执行'}
+        open={stepOpen} onOk={submitStep} onCancel={() => setStepOpen(false)} okText="签名提交">
         <Form form={stepForm} layout="vertical" initialValues={{ result: 'PASS' }}>
           <Form.Item name="result" label="结果" rules={[{ required: true }]}>
             <Select options={[
@@ -320,6 +404,9 @@ export default function OperationTicketList() {
             ]} />
           </Form.Item>
           <Form.Item name="notes" label="备注"><Input.TextArea rows={3} /></Form.Item>
+          <Form.Item name="signature_password" label="签名密码" rules={[{ required: true, message: '请输入登录密码' }]}>
+            <Input.Password autoComplete="current-password" />
+          </Form.Item>
         </Form>
       </Modal>
     </Card>

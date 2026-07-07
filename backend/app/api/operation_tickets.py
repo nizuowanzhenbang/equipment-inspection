@@ -15,9 +15,10 @@ from app.models.ticket import (
 from app.models.user import User
 from app.schemas.ticket import (
     OperationTicketCreate, OperationTicketUpdate, StepExecute, OperationTicketResponse,
-    OperationTemplateCreate, OperationTemplateResponse,
+    OperationTemplateCreate, OperationTemplateResponse, OpReview, OpApprove,
 )
 from app.utils.helpers import api_response, paginate_response, generate_operation_ticket_no
+from app.utils.signature import assert_password, append_signature, make_signature, verify_signature
 
 router = APIRouter(prefix="/api/operation-tickets", tags=["操作票"])
 
@@ -199,31 +200,37 @@ def update_ticket(oid: int, payload: OperationTicketUpdate, db: Session = Depend
 
 
 @router.post("/{oid}/review")
-def review(oid: int, db: Session = Depends(get_db), current: User = Depends(require_supervisor)):
+def review(oid: int, payload: OpReview, db: Session = Depends(get_db), current: User = Depends(require_supervisor)):
     o = db.query(OperationTicket).filter(OperationTicket.id == oid).first()
     if not o:
         raise HTTPException(404, "操作票不存在")
     if o.status != OperationTicketStatus.DRAFT:
         raise HTTPException(400, f"状态 {o.status.value} 不可审核")
+    assert_password(current, payload.signature_password)
     o.status = OperationTicketStatus.REVIEWED
     o.supervisor = o.supervisor or current.username
     o.reviewed_at = datetime.utcnow()
+    sig = make_signature(o.ticket_no, "review", current.username)
+    o.signatures = append_signature(o.signatures, sig)
     db.commit()
-    return api_response(message="已审核")
+    return api_response(message="已审核", data={"signature": sig})
 
 
 @router.post("/{oid}/approve")
-def approve(oid: int, db: Session = Depends(get_db), current: User = Depends(require_supervisor)):
+def approve(oid: int, payload: OpApprove, db: Session = Depends(get_db), current: User = Depends(require_supervisor)):
     o = db.query(OperationTicket).filter(OperationTicket.id == oid).first()
     if not o:
         raise HTTPException(404, "操作票不存在")
     if o.status != OperationTicketStatus.REVIEWED:
         raise HTTPException(400, f"状态 {o.status.value} 不可批准")
+    assert_password(current, payload.signature_password)
     o.status = OperationTicketStatus.APPROVED
     o.approver = current.username
     o.approved_at = datetime.utcnow()
+    sig = make_signature(o.ticket_no, "approve", current.username)
+    o.signatures = append_signature(o.signatures, sig)
     db.commit()
-    return api_response(message="已批准")
+    return api_response(message="已批准", data={"signature": sig})
 
 
 @router.post("/{oid}/start")
@@ -257,20 +264,41 @@ def execute_step(oid: int, payload: StepExecute, db: Session = Depends(get_db), 
             break
     if matched is None:
         raise HTTPException(400, f"未找到 seq={payload.seq} 步骤")
+    assert_password(current, payload.signature_password)
     matched["result"] = payload.result.upper()
     matched["notes"] = payload.notes
     matched["executed_by"] = current.username
     matched["executed_at"] = datetime.utcnow().isoformat()
     o.steps = steps
+    # 每步执行单独签名
+    step_sig = make_signature(o.ticket_no, f"step-{payload.seq}", current.username)
+    matched["sig_hash"] = step_sig["sig_hash"]
+    o.signatures = append_signature(o.signatures, step_sig)
     # 全部完成 → COMPLETED
     if all(s.get("result") for s in steps):
         o.status = OperationTicketStatus.COMPLETED
         o.completed_at = datetime.utcnow()
+        done_sig = make_signature(o.ticket_no, "complete", current.username)
+        o.signatures = append_signature(o.signatures, done_sig)
     db.commit()
     return api_response(
         message="步骤已记录" + ("（全部完成）" if o.status == OperationTicketStatus.COMPLETED else ""),
-        data={"all_done": o.status == OperationTicketStatus.COMPLETED},
+        data={"all_done": o.status == OperationTicketStatus.COMPLETED, "signature": step_sig},
     )
+
+
+@router.get("/{oid}/signatures/verify")
+def verify_op_signatures(oid: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    o = db.query(OperationTicket).filter(OperationTicket.id == oid).first()
+    if not o:
+        raise HTTPException(404, "操作票不存在")
+    chain = list(o.signatures or [])
+    results = [
+        {**entry, "valid": verify_signature(entry, o.ticket_no)}
+        for entry in chain
+    ]
+    all_ok = all(r["valid"] for r in results) if results else True
+    return api_response(data={"ticket_no": o.ticket_no, "all_valid": all_ok, "signatures": results})
 
 
 @router.post("/{oid}/cancel")

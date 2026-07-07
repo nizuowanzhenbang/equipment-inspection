@@ -21,18 +21,20 @@ from app.models.defect import Defect
 from app.models.ticket import WorkTicket, OperationTicket, OperationTemplate
 from app.models.spare_part import SparePart, StockMovement
 from app.models.audit import AuditLog
+from app.models.purchase_request import PurchaseRequest
 
 from app.api import (
     auth, equipments, routes_api, tasks, defects, dashboard,
     scheduler_api, reports, uploads, work_tickets, operation_tickets, predictive,
-    spare_parts, users, audit,
+    spare_parts, users, audit, purchase_requests,
 )
 from app.api.deps import hash_password
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.realtime import manager as ws_manager, ws_endpoint
 
 _ = (User, Equipment, InspectionRoute, InspectionPoint, InspectionTask, InspectionRecord,
-     Defect, WorkTicket, OperationTicket, OperationTemplate, SparePart, StockMovement, AuditLog)
+     Defect, WorkTicket, OperationTicket, OperationTemplate, SparePart, StockMovement, AuditLog,
+     PurchaseRequest)
 
 
 def _create_default_users(db) -> None:
@@ -59,11 +61,30 @@ def _create_default_users(db) -> None:
         print(f"[启动] 已创建默认账户：{', '.join(created)}")
 
 
+def _auto_migrate(db) -> None:
+    """SQLite 启动时 ALTER TABLE 补齐 v3.0 新增字段（生产环境请走 Alembic）"""
+    if not settings.DATABASE_URL.startswith("sqlite"):
+        return
+    from sqlalchemy import text
+    statements = [
+        "ALTER TABLE work_tickets ADD COLUMN signatures JSON",
+        "ALTER TABLE operation_tickets ADD COLUMN signatures JSON",
+    ]
+    for sql in statements:
+        try:
+            db.execute(text(sql))
+            db.commit()
+            print(f"[迁移] {sql}")
+        except Exception:
+            db.rollback()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        _auto_migrate(db)
         _create_default_users(db)
     finally:
         db.close()
@@ -111,6 +132,7 @@ app.include_router(predictive.router)
 app.include_router(spare_parts.router)
 app.include_router(users.router)
 app.include_router(audit.router)
+app.include_router(purchase_requests.router)
 
 
 @app.websocket("/ws")

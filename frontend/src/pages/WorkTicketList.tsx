@@ -3,15 +3,17 @@ import {
   Card, Table, Tag, Button, Space, Select, Modal, Form, Input, DatePicker, message,
   Drawer, Descriptions, List, Checkbox, Typography, Divider,
 } from 'antd'
-import { FileTextOutlined, PlusOutlined, ReloadOutlined, PrinterOutlined } from '@ant-design/icons'
+import { FileTextOutlined, PlusOutlined, ReloadOutlined, PrinterOutlined, SafetyCertificateOutlined, AuditOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { useSearchParams } from 'react-router-dom'
 import { workTicketApi, equipmentApi, defectApi } from '../api'
+import type { SignatureEntry, SignatureVerifyResult } from '../api'
 import { useAuthStore, canRepair, canSupervise, canWrite } from '../stores/auth'
 import type {
   WorkTicket, WorkTicketStatus, WorkTicketType, Equipment, Defect, SafetyMeasure,
 } from '../types'
 import { WT_STATUS_LABEL, WT_TYPE_LABEL } from '../types'
+import SignatureModal from '../components/SignatureModal'
 
 const { Text } = Typography
 
@@ -38,6 +40,9 @@ export default function WorkTicketList() {
 
   const [detailOpen, setDetailOpen] = useState(false)
   const [detail, setDetail] = useState<WorkTicket | null>(null)
+  const [sigStage, setSigStage] = useState<'issue' | 'permit' | 'complete' | 'close' | null>(null)
+  const [verifyResult, setVerifyResult] = useState<SignatureVerifyResult | null>(null)
+  const [verifyOpen, setVerifyOpen] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -109,6 +114,40 @@ export default function WorkTicketList() {
       if (detail) reloadDetail(detail.id)
       load()
     } catch (e: any) { message.error(e?.detail || '失败') }
+  }
+
+  const handleSignedAction = async (password: string, extra: Record<string, any>) => {
+    if (!detail || !sigStage) return
+    try {
+      if (sigStage === 'issue') {
+        await workTicketApi.issue(detail.id, extra.approval_notes, password)
+        message.success('已签发')
+      } else if (sigStage === 'permit') {
+        await workTicketApi.permit(detail.id, extra.permitter, extra.notes, password)
+        message.success('已许可开工')
+      } else if (sigStage === 'complete') {
+        await workTicketApi.complete(detail.id, extra.closing_notes, password)
+        message.success('工作终结')
+      } else if (sigStage === 'close') {
+        await workTicketApi.close(detail.id, password)
+        message.success('已归档')
+      }
+      setSigStage(null)
+      reloadDetail(detail.id)
+      load()
+    } catch (e: any) {
+      message.error(e?.detail || '签名失败')
+      throw e
+    }
+  }
+
+  const verifyChain = async () => {
+    if (!detail) return
+    try {
+      const res = await workTicketApi.verifySignatures(detail.id)
+      setVerifyResult(res.data)
+      setVerifyOpen(true)
+    } catch (e: any) { message.error(e?.detail || '校验失败') }
   }
 
   const statusTag = (s: WorkTicketStatus) => {
@@ -275,24 +314,92 @@ export default function WorkTicketList() {
                 <Button onClick={() => transition(() => workTicketApi.submit(detail.id), '已提交')}>提交</Button>
               )}
               {supervisor && detail.status === 'SUBMITTED' && (
-                <Button type="primary" onClick={() => transition(() => workTicketApi.issue(detail.id), '已签发')}>签发</Button>
+                <Button type="primary" icon={<SafetyCertificateOutlined />} onClick={() => setSigStage('issue')}>签发（电子签名）</Button>
               )}
               {supervisor && detail.status === 'ISSUED' && (
-                <Button type="primary" onClick={() => transition(() => workTicketApi.permit(detail.id), '已许可')}>许可开工</Button>
+                <Button type="primary" icon={<SafetyCertificateOutlined />} onClick={() => setSigStage('permit')}>许可开工（签名）</Button>
               )}
               {repairer && detail.status === 'IN_WORK' && (
-                <Button type="primary" onClick={() => transition(() => workTicketApi.complete(detail.id), '工作终结')}>工作终结</Button>
+                <Button type="primary" icon={<SafetyCertificateOutlined />} onClick={() => setSigStage('complete')}>工作终结（签名）</Button>
               )}
               {supervisor && detail.status === 'COMPLETED' && (
-                <Button type="primary" onClick={() => transition(() => workTicketApi.close(detail.id), '已归档')}>收票归档</Button>
+                <Button type="primary" icon={<SafetyCertificateOutlined />} onClick={() => setSigStage('close')}>收票归档（签名）</Button>
               )}
               {supervisor && !['CLOSED', 'COMPLETED', 'CANCELLED'].includes(detail.status) && (
                 <Button danger onClick={() => transition(() => workTicketApi.cancel(detail.id), '已取消')}>作废</Button>
               )}
             </Space>
+
+            <Divider orientation="left">签名链 <Button size="small" icon={<AuditOutlined />} onClick={verifyChain}>校验</Button></Divider>
+            <List
+              size="small"
+              bordered
+              dataSource={(detail.signatures as SignatureEntry[]) || []}
+              locale={{ emptyText: '尚未签名' }}
+              renderItem={(s) => (
+                <List.Item>
+                  <Tag color="purple">{s.stage}</Tag>
+                  <Text strong style={{ marginRight: 8 }}>{s.signer}</Text>
+                  <Text type="secondary" style={{ marginRight: 8 }}>{dayjs(s.signed_at).format('MM-DD HH:mm:ss')}</Text>
+                  <Text code style={{ fontSize: 11 }}>{s.sig_hash.slice(0, 16)}…</Text>
+                </List.Item>
+              )}
+            />
           </>
         )}
       </Drawer>
+
+      <SignatureModal
+        open={sigStage !== null}
+        title={
+          sigStage === 'issue' ? '签发工作票（电子签名）' :
+          sigStage === 'permit' ? '许可开工（电子签名）' :
+          sigStage === 'complete' ? '工作终结（电子签名）' :
+          sigStage === 'close' ? '收票归档（电子签名）' : '电子签名'
+        }
+        stage={sigStage || ''}
+        extraForm={
+          sigStage === 'issue' ? (
+            <Form.Item name="approval_notes" label="签发备注"><Input.TextArea rows={2} /></Form.Item>
+          ) : sigStage === 'permit' ? (
+            <>
+              <Form.Item name="permitter" label="许可人"><Input placeholder="默认当前用户" /></Form.Item>
+              <Form.Item name="notes" label="备注"><Input.TextArea rows={2} /></Form.Item>
+            </>
+          ) : sigStage === 'complete' ? (
+            <Form.Item name="closing_notes" label="收尾说明"><Input.TextArea rows={2} /></Form.Item>
+          ) : null
+        }
+        onCancel={() => setSigStage(null)}
+        onConfirm={handleSignedAction}
+      />
+
+      <Modal
+        open={verifyOpen}
+        title="签名链校验"
+        footer={null}
+        onCancel={() => setVerifyOpen(false)}
+        width={600}
+      >
+        {verifyResult && (
+          <>
+            <Tag color={verifyResult.all_valid ? 'green' : 'red'} style={{ marginBottom: 12 }}>
+              {verifyResult.all_valid ? '✓ 所有签名有效，未被篡改' : '✗ 检测到无效签名'}
+            </Tag>
+            <List
+              dataSource={verifyResult.signatures}
+              renderItem={(s) => (
+                <List.Item>
+                  <Tag color={s.valid ? 'green' : 'red'}>{s.valid ? '✓' : '✗'}</Tag>
+                  <Tag>{s.stage}</Tag>
+                  <Text>{s.signer}</Text>
+                  <Text type="secondary" style={{ marginLeft: 8 }}>{dayjs(s.signed_at).format('YYYY-MM-DD HH:mm:ss')}</Text>
+                </List.Item>
+              )}
+            />
+          </>
+        )}
+      </Modal>
     </Card>
   )
 }

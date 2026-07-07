@@ -7,7 +7,7 @@ import { reportApi, schedulerApi, downloadCsv } from '../api'
 import type { MonthlyReportItem, AvailabilityItem, SchedulerJob } from '../types'
 import { SYSTEM_LABEL, EquipmentSystem } from '../types'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function Reports() {

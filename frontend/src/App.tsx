@@ -17,6 +17,8 @@ import AuditLog from './pages/AuditLog'
 import MobileScan from './pages/MobileScan'
 import WorkTicketPrint from './pages/WorkTicketPrint'
 import QRPrint from './pages/QRPrint'
+import OfflineQueue from './pages/OfflineQueue'
+import PurchaseRequestList from './pages/PurchaseRequestList'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token)
@@ -49,6 +51,8 @@ export default function App() {
           <Route path="users" element={<UserManagement />} />
           <Route path="audit" element={<AuditLog />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="offline" element={<OfflineQueue />} />
+          <Route path="purchase-requests" element={<PurchaseRequestList />} />
         </Route>
         <Route path="/m/scan" element={<MobileScan />} />
         <Route path="/work-tickets/:id/print" element={<PrivateRoute><WorkTicketPrint /></PrivateRoute>} />

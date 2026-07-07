@@ -26,13 +26,12 @@ export default function PredictiveMaintenance() {
   const low = items.filter(i => i.risk_level === 'LOW').length
   const avgProb = items.length ? Math.round(items.reduce((s, i) => s + i.failure_probability, 0) / items.length * 100) : 0
 
-  const top10 = items.slice(0, 10)
   const scatterOption = {
     tooltip: {
       trigger: 'item',
       formatter: (p: any) => {
         const d = p.data._raw as PredictiveRiskItem
-        return `${d.code} ${d.name}<br/>风险分=${d.risk_score}<br/>失效概率=${(d.failure_probability * 100).toFixed(1)}%<br/>近 90 天缺陷=${d.defects_90d}`
+        return `${d.code} ${d.name}<br/>风险分 ${d.risk_score}<br/>失效概率=${(d.failure_probability * 100).toFixed(1)}%<br/>近 90 天缺陷 ${d.defects_90d}`
       },
     },
     grid: { left: 50, right: 30, top: 30, bottom: 50 },

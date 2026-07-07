@@ -62,3 +62,7 @@ def generate_operation_ticket_no(seq: int) -> str:
 
 def generate_spare_part_code(seq: int) -> str:
     return f"SP-{seq:04d}"
+
+
+def generate_pr_no(seq: int) -> str:
+    return f"PR-{datetime.now().strftime('%Y%m%d')}-{seq:04d}"

@@ -151,3 +151,42 @@
 - CRITICAL→MAJOR 隐患（14d 整改）；其他→GENERAL（30d）
 - 设备编号前缀自动映射 HazardArea
 - 返回 `{hazard_no, id, duplicated}`，equipment-inspection 写回 Defect.safety_hazard_no
+
+## v3.0 新增能力（2026-05-23）
+
+### 对象存储抽象（`app/utils/storage.py`）
+- `LocalStorage`：写到 `UPLOAD_DIR/YYYYMMDD/`，URL `/uploads/...`
+- `S3Storage`：boto3 sigv4，兼容 AWS S3 / MinIO / 阿里云 OSS；启动尝试 head/create bucket；写完优先用 `S3_PUBLIC_URL` 拼，否则签发预签名 URL
+- `get_storage()` 按 `STORAGE_BACKEND` 单例懒加载，S3 boto3 缺失时降级 LocalStorage
+- 新接口 `GET /api/uploads/presign?key=` 给前端重签预签名
+
+### 两票电子签名（`app/utils/signature.py`, `frontend/components/SignatureModal.tsx`）
+- HMAC-SHA256(SIGNATURE_SECRET, f"{ticket_no}|{stage}|{username}|{timestamp}")
+- 关键节点：WorkTicket {issue, permit, complete, close} + OperationTicket {review, approve, step-N, complete}
+- API payload 加 `signature_password` 字段，后端 `assert_password()` 用 bcrypt 二次校验
+- `signatures` JSON 数组 [{stage, signer, signed_at, sig_hash}]
+- 验签接口 `GET /{type}-tickets/{id}/signatures/verify` 重算 HMAC 标记 valid 字段
+- SQLite 启动时 `_auto_migrate()` ALTER TABLE 加 signatures 列
+
+### PWA 离线点检（`frontend/src/utils/offlineStore.ts`, `pages/OfflineQueue.tsx`, `public/sw.js`）
+- IndexedDB（DB `equipment-inspection-offline`）两张 store：`queue`（待同步记录） + `cached_tasks`（缓存任务）
+- `enqueueRecord` 入队 → `syncQueue` 批量 POST /api/tasks/{id}/records → 成功移除，失败 bumpRetry
+- `autoSync()` 监听 `online` 事件，启动 1.5s 后跑一次；main.tsx 用 notification 提示同步结果
+- Service Worker v2：`/api/tasks/*` 和 `/api/routes` 走 stale-while-revalidate；其他 API 不缓存
+- 前端 `pages/OfflineQueue.tsx`：在线/离线 Tag、4 KPI、列表+重试列、手动入队 Modal、一键同步
+
+### 备件采购申请（`app/models/purchase_request.py`, `app/api/purchase_requests.py`）
+- 状态机：DRAFT → SUBMITTED → APPROVED/REJECTED → SENT → RECEIVED；可 CANCELLED
+- 编号 PR-YYYYMMDD-NNNN
+- 来源：MANUAL / AUTO_LOW_STOCK
+- `POST /purchase-requests/auto-generate`：扫描 `stock_qty < min_qty` 备件且无 in-flight 申请，按 `2×min_qty - stock_qty` 建议数量
+- 调度器 5th job `auto_generate_purchase_requests`：每 SCHEDULER_PR_AUTO_HOURS (默认 12h) 跑一次
+- `POST /{id}/send`：调用 `app/integration/procurement_client.push_request` → fuel-procurement v3 接口 `POST /api/integration/material-requests`（X-Integration-Token）
+- 无外部系统时降级 mock：写 SENT + 外部单号 `MOCK-PR-...`
+- `POST /{id}/receive`：自动写 StockMovement(IN) 并累计 received_qty，达 qty 转 RECEIVED
+
+### Docker Compose 编排（`docker-compose.yml`, `backend/Dockerfile`, `frontend/Dockerfile`, `frontend/nginx.conf`）
+- 4 服务：backend(8003) / frontend(8080→80) / postgres:16(55432→5432) / minio(9000+9001)
+- 卷持久化：eq_uploads / eq_pgdata / eq_minio
+- 后端环境变量已配 S3=MinIO；plant-safety 同栈编排在 yml 末尾给了注释示例
+- frontend nginx 配置：SPA fallback + /api 反代后端 + /ws 升级 + /uploads 透传

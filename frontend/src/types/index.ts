@@ -196,6 +196,7 @@ export interface WorkTicket {
   closed_at?: string | null
   approval_notes?: string | null
   closing_notes?: string | null
+  signatures?: Array<{ stage: string; signer: string; signed_at: string; sig_hash: string }> | null
   created_at: string
   updated_at: string
 }
@@ -232,6 +233,7 @@ export interface OperationTicket {
   started_at?: string | null
   completed_at?: string | null
   notes?: string | null
+  signatures?: Array<{ stage: string; signer: string; signed_at: string; sig_hash: string }> | null
   created_at: string
   updated_at: string
 }

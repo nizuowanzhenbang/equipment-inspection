@@ -8,7 +8,7 @@ import type {
   DashboardOverview, DefectTrendItem, SystemDistItem, TopFaultyItem, HealthRankItem,
   MonthlyReportItem, AvailabilityItem, SchedulerJob,
   WorkTicket, WorkTicketStatus, WorkTicketType,
-  OperationTicket, OperationTicketStatus, OperationTicketType, OperationStep,
+  OperationTicket, OperationTicketStatus, OperationTicketType,
   PredictiveRiskItem,
   SparePart, StockMovement, StockMovementType,
   EquipmentProfile,
@@ -130,16 +130,33 @@ export const workTicketApi = {
   get: (id: number) => api.get<unknown, ApiResponse<WorkTicket>>(`/work-tickets/${id}`),
   update: (id: number, data: any) => api.put<unknown, ApiResponse<WorkTicket>>(`/work-tickets/${id}`, data),
   submit: (id: number) => api.post<unknown, ApiResponse<null>>(`/work-tickets/${id}/submit`),
-  issue: (id: number, approval_notes?: string) =>
-    api.post<unknown, ApiResponse<null>>(`/work-tickets/${id}/issue`, { approval_notes }),
-  permit: (id: number, permitter?: string, notes?: string) =>
-    api.post<unknown, ApiResponse<null>>(`/work-tickets/${id}/permit`, { permitter, notes }),
-  complete: (id: number, closing_notes?: string) =>
-    api.post<unknown, ApiResponse<null>>(`/work-tickets/${id}/complete`, { closing_notes }),
-  close: (id: number) => api.post<unknown, ApiResponse<null>>(`/work-tickets/${id}/close`),
+  issue: (id: number, approval_notes?: string, signature_password?: string) =>
+    api.post<unknown, ApiResponse<{ signature: SignatureEntry }>>(`/work-tickets/${id}/issue`, { approval_notes, signature_password }),
+  permit: (id: number, permitter?: string, notes?: string, signature_password?: string) =>
+    api.post<unknown, ApiResponse<{ signature: SignatureEntry }>>(`/work-tickets/${id}/permit`, { permitter, notes, signature_password }),
+  complete: (id: number, closing_notes?: string, signature_password?: string) =>
+    api.post<unknown, ApiResponse<{ signature: SignatureEntry }>>(`/work-tickets/${id}/complete`, { closing_notes, signature_password }),
+  close: (id: number, signature_password?: string) =>
+    api.post<unknown, ApiResponse<{ signature: SignatureEntry }>>(`/work-tickets/${id}/close`, { signature_password }),
   cancel: (id: number) => api.post<unknown, ApiResponse<null>>(`/work-tickets/${id}/cancel`),
   checkSafety: (id: number, step_seq: number) =>
     api.post<unknown, ApiResponse<null>>(`/work-tickets/${id}/check-safety`, null, { params: { step_seq } }),
+  verifySignatures: (id: number) =>
+    api.get<unknown, ApiResponse<SignatureVerifyResult>>(`/work-tickets/${id}/signatures/verify`),
+}
+
+export interface SignatureEntry {
+  stage: string
+  signer: string
+  signed_at: string
+  sig_hash: string
+  valid?: boolean
+}
+
+export interface SignatureVerifyResult {
+  ticket_no: string
+  all_valid: boolean
+  signatures: SignatureEntry[]
 }
 
 export interface OperationTemplate {
@@ -160,11 +177,15 @@ export const opTicketApi = {
   create: (data: any) => api.post<unknown, ApiResponse<OperationTicket>>('/operation-tickets', data),
   get: (id: number) => api.get<unknown, ApiResponse<OperationTicket>>(`/operation-tickets/${id}`),
   update: (id: number, data: any) => api.put<unknown, ApiResponse<OperationTicket>>(`/operation-tickets/${id}`, data),
-  review: (id: number) => api.post<unknown, ApiResponse<null>>(`/operation-tickets/${id}/review`),
-  approve: (id: number) => api.post<unknown, ApiResponse<null>>(`/operation-tickets/${id}/approve`),
+  review: (id: number, signature_password?: string) =>
+    api.post<unknown, ApiResponse<{ signature: SignatureEntry }>>(`/operation-tickets/${id}/review`, { signature_password }),
+  approve: (id: number, signature_password?: string) =>
+    api.post<unknown, ApiResponse<{ signature: SignatureEntry }>>(`/operation-tickets/${id}/approve`, { signature_password }),
   start: (id: number) => api.post<unknown, ApiResponse<null>>(`/operation-tickets/${id}/start`),
-  executeStep: (id: number, seq: number, result: 'PASS' | 'FAIL', notes?: string) =>
-    api.post<unknown, ApiResponse<{ all_done: boolean }>>(`/operation-tickets/${id}/execute-step`, { seq, result, notes }),
+  executeStep: (id: number, seq: number, result: 'PASS' | 'FAIL', notes?: string, signature_password?: string) =>
+    api.post<unknown, ApiResponse<{ all_done: boolean; signature: SignatureEntry }>>(`/operation-tickets/${id}/execute-step`, { seq, result, notes, signature_password }),
+  verifySignatures: (id: number) =>
+    api.get<unknown, ApiResponse<SignatureVerifyResult>>(`/operation-tickets/${id}/signatures/verify`),
   cancel: (id: number) => api.post<unknown, ApiResponse<null>>(`/operation-tickets/${id}/cancel`),
   listTemplates: () => api.get<unknown, ApiResponse<OperationTemplate[]>>('/operation-tickets/templates'),
   createTemplate: (data: { name: string; operation_type: OperationTicketType; description?: string; steps: Array<{ seq: number; action: string; expected?: string }> }) =>
@@ -217,6 +238,56 @@ export const userApi = {
     api.post<unknown, ApiResponse<null>>(`/users/${id}/reset-password`, { new_password }),
   toggleActive: (id: number) =>
     api.post<unknown, ApiResponse<{ is_active: boolean }>>(`/users/${id}/toggle-active`),
+}
+
+export type PRStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'SENT' | 'RECEIVED' | 'CANCELLED'
+export type PRSource = 'AUTO_LOW_STOCK' | 'MANUAL'
+
+export interface PurchaseRequest {
+  id: number
+  pr_no: string
+  spare_part_id: number
+  spare_part_code?: string
+  spare_part_name?: string
+  qty: number
+  estimated_amount: number
+  urgency: string
+  reason?: string | null
+  source: PRSource
+  status: PRStatus
+  applicant?: string | null
+  approver?: string | null
+  submitted_at?: string | null
+  approved_at?: string | null
+  rejected_reason?: string | null
+  external_order_no?: string | null
+  sent_at?: string | null
+  received_at?: string | null
+  received_qty: number
+  created_at: string
+  updated_at: string
+}
+
+export const PR_STATUS_LABEL: Record<PRStatus, string> = {
+  DRAFT: '草稿', SUBMITTED: '已提交', APPROVED: '已批准', REJECTED: '已驳回',
+  SENT: '已推送采购', RECEIVED: '已到货', CANCELLED: '已取消',
+}
+
+export const purchaseRequestApi = {
+  list: (params?: { page?: number; page_size?: number; status?: PRStatus; source?: PRSource }) =>
+    api.get<unknown, ApiResponse<PaginatedResponse<PurchaseRequest>>>('/purchase-requests', { params }),
+  create: (data: { spare_part_id: number; qty: number; urgency?: string; reason?: string }) =>
+    api.post<unknown, ApiResponse<PurchaseRequest>>('/purchase-requests', data),
+  autoGenerate: () =>
+    api.post<unknown, ApiResponse<{ created: any[] }>>(`/purchase-requests/auto-generate`),
+  get: (id: number) => api.get<unknown, ApiResponse<PurchaseRequest>>(`/purchase-requests/${id}`),
+  submit: (id: number) => api.post<unknown, ApiResponse<null>>(`/purchase-requests/${id}/submit`),
+  approve: (id: number, notes?: string) => api.post<unknown, ApiResponse<null>>(`/purchase-requests/${id}/approve`, { notes }),
+  reject: (id: number, reason: string) => api.post<unknown, ApiResponse<null>>(`/purchase-requests/${id}/reject`, { reason }),
+  send: (id: number) => api.post<unknown, ApiResponse<{ external_order_no?: string }>>(`/purchase-requests/${id}/send`),
+  receive: (id: number, received_qty: number) =>
+    api.post<unknown, ApiResponse<{ stock_qty: number; status: string }>>(`/purchase-requests/${id}/receive`, { received_qty }),
+  cancel: (id: number) => api.post<unknown, ApiResponse<null>>(`/purchase-requests/${id}/cancel`),
 }
 
 export const sparePartApi = {

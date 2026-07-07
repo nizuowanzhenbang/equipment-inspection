@@ -138,17 +138,45 @@
 - [x] `/audit` AuditLog 页：彩色 action 标签 + 关键词搜索 + 分页
 - [x] Layout 菜单：ADMIN 看到"用户管理"+"审计日志"两项
 
-## v3.0（规划）
+## v3.0（已完成，2026-05-23）
 
-- [ ] 文件存储扩展：S3 / OSS 适配（当前仅本地 disk）
-- [ ] 两票电子签名（CA 集成）
-- [ ] 移动端 PWA 离线模式（IndexedDB 暂存点检记录）
-- [ ] 备件采购申请单（低库存自动转采购提醒，与 fuel-procurement 系统对齐流程）
-- [ ] Docker Compose 一键启动 equipment-inspection + plant-safety
+### 后端
+- [x] 存储抽象层 `app/utils/storage.py`：LocalStorage + S3Storage（boto3，兼容 AWS / MinIO / 阿里云 OSS），按 `STORAGE_BACKEND=local|s3` 切换，自动建桶 + 预签名 URL
+- [x] uploads API 改造：调用 `get_storage()`，新增 `GET /api/uploads/presign?key=` 重签预签名 URL
+- [x] 两票电子签名 `app/utils/signature.py`：HMAC-SHA256(SIGNATURE_SECRET, ticket_no|stage|user|ts) 模拟 CA，关键流转必须再次输入密码
+  - WorkTicket：issue/permit/complete/close 4 个签名节点
+  - OperationTicket：review/approve + 每步 step + complete
+  - `signatures` JSON 字段（SQLite 启动 ALTER TABLE 自动迁移）
+  - `GET /work-tickets/{id}/signatures/verify` + `GET /operation-tickets/{id}/signatures/verify` 重算 HMAC 校验签名链
+- [x] 采购申请单 PurchaseRequest 模型 + 8 个 API：CRUD + submit/approve/reject/send/receive/cancel
+- [x] 集成 `app/integration/procurement_client.py`：APPROVED → POST `/api/integration/material-requests`（fuel-procurement v3 接口约定）
+- [x] 入库回填：receive 自动写一条 StockMovement(IN) 并更新 SparePart.stock_qty
+- [x] 调度器新增 5th job `auto_generate_purchase_requests`：每 12h 扫描低库存 + 无 in-flight 申请的备件批量建草稿
+- [x] APP_VERSION → 3.0.0，requirements.txt 加 boto3
+
+### 前端
+- [x] `components/SignatureModal.tsx`：通用电子签名 Modal（密码 + 额外字段插槽）
+- [x] WorkTicketList 改造：签发/许可/终结/归档 4 节点全部带签名 Modal，详情抽屉新增"签名链 + 校验"区域
+- [x] OperationTicketList 改造：审核/批准带签名 Modal，每步执行 Modal 增加签名密码字段
+- [x] 离线点检：`utils/offlineStore.ts` IndexedDB 包装（队列 + 缓存任务），autoSync 监听 online 事件批量重放
+- [x] `pages/OfflineQueue.tsx`：队列状态/4 KPI/手动入队/一键同步/失败重试
+- [x] `public/sw.js` 升级 v2：对 `/api/tasks/*` `/api/routes` 走 stale-while-revalidate，主线程外的 POST 不拦截
+- [x] `main.tsx` 接入 `autoSync(notification.info)`，恢复网络后 toast 同步结果
+- [x] `pages/PurchaseRequestList.tsx`：列表 + 自动生成 + 详情 Drawer + 状态机按钮 + 推送/收货/驳回
+- [x] Layout 菜单 +2 项（采购申请 / 离线队列）；路由挂载
+
+### 运维
+- [x] `backend/Dockerfile`：python:3.11-slim + psycopg2 + healthcheck 暴露 8003
+- [x] `frontend/Dockerfile`：node:20-alpine build + nginx:alpine serve + nginx.conf（SPA fallback + /api 反代 + /ws 升级）
+- [x] `docker-compose.yml`：backend + frontend + postgres 16 + minio + 卷持久化，注释里给 plant-safety 同栈编排示例
+- [x] `.dockerignore`（根 + backend + frontend）
 
 ## v4.0（远期规划）
 
-- [ ] 预测性维护：基于近 90 天点检数据预测设备失效概率
+## v4.0（远期规划）
+
+- [ ] 真正的 CA 签名（外部硬件 USB Key / 国密 SM2）
 - [ ] 与 DCS 报警系统对接：报警自动转缺陷工单
 - [ ] 备品备件库存联动（与未来的 plant-materials 系统）
 - [ ] 移动端语音录入（点检员现场免提）
+- [ ] 大模型问答：基于审计日志/缺陷历史的运维助手

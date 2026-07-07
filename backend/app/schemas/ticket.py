@@ -35,15 +35,22 @@ class WorkTicketUpdate(BaseModel):
 
 class WorkTicketIssue(BaseModel):
     approval_notes: Optional[str] = None
+    signature_password: Optional[str] = None    # v3.0 签名再确认密码
 
 
 class WorkTicketPermit(BaseModel):
     permitter: Optional[str] = None
     notes: Optional[str] = None
+    signature_password: Optional[str] = None
 
 
 class WorkTicketComplete(BaseModel):
     closing_notes: Optional[str] = None
+    signature_password: Optional[str] = None
+
+
+class WorkTicketClose(BaseModel):
+    signature_password: Optional[str] = None
 
 
 class WorkTicketResponse(BaseModel):
@@ -75,6 +82,7 @@ class WorkTicketResponse(BaseModel):
     closed_at: Optional[datetime]
     approval_notes: Optional[str]
     closing_notes: Optional[str]
+    signatures: Optional[Any] = None
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
@@ -115,6 +123,17 @@ class StepExecute(BaseModel):
     seq: int
     result: str
     notes: Optional[str] = None
+    signature_password: Optional[str] = None
+
+
+class OpReview(BaseModel):
+    notes: Optional[str] = None
+    signature_password: Optional[str] = None
+
+
+class OpApprove(BaseModel):
+    notes: Optional[str] = None
+    signature_password: Optional[str] = None
 
 
 class OperationTemplateCreate(BaseModel):
@@ -155,6 +174,7 @@ class OperationTicketResponse(BaseModel):
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
     notes: Optional[str]
+    signatures: Optional[Any] = None
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)

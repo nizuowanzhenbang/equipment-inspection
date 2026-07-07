@@ -21,7 +21,9 @@ from app.database import SessionLocal
 from app.models.defect import Defect, DefectStatus
 from app.models.route import InspectionRoute, RouteFrequency
 from app.models.task import InspectionTask, TaskStatus
-from app.utils.helpers import generate_task_no
+from app.models.spare_part import SparePart
+from app.models.purchase_request import PurchaseRequest, PRStatus, PRSource
+from app.utils.helpers import generate_task_no, generate_pr_no
 from app.integration.safety_client import retry_pending
 from app.realtime import emit_overdue_swept, emit_missed_swept
 
@@ -153,6 +155,46 @@ def retry_safety_sync(db: Session) -> dict:
     return retry_pending(db, limit=50)
 
 
+@_with_db
+def auto_generate_purchase_requests(db: Session) -> dict:
+    """扫描低库存备件，为没有 in-flight 申请的自动建草稿（每日一次）"""
+    in_flight = (PRStatus.DRAFT, PRStatus.SUBMITTED, PRStatus.APPROVED, PRStatus.SENT)
+    candidates = db.query(SparePart).filter(SparePart.stock_qty < SparePart.min_qty).all()
+    today = datetime.utcnow().date()
+    next_seq = (
+        db.query(func.count(PurchaseRequest.id))
+        .filter(func.date(PurchaseRequest.created_at) == today)
+        .scalar() or 0
+    )
+    created: list[str] = []
+    for sp in candidates:
+        exists = (
+            db.query(PurchaseRequest)
+            .filter(PurchaseRequest.spare_part_id == sp.id, PurchaseRequest.status.in_(in_flight))
+            .first()
+        )
+        if exists:
+            continue
+        next_seq += 1
+        suggested_qty = max(float(sp.min_qty or 0) * 2 - float(sp.stock_qty or 0), float(sp.min_qty or 0))
+        pr = PurchaseRequest(
+            pr_no=generate_pr_no(next_seq),
+            spare_part_id=sp.id,
+            qty=suggested_qty,
+            estimated_amount=suggested_qty * float(sp.unit_price or 0),
+            urgency="URGENT" if float(sp.stock_qty or 0) <= 0 else "NORMAL",
+            reason=f"低库存自动触发：当前 {sp.stock_qty}，安全 {sp.min_qty}",
+            source=PRSource.AUTO_LOW_STOCK,
+            status=PRStatus.SUBMITTED,
+            applicant="scheduler",
+            submitted_at=datetime.utcnow(),
+        )
+        db.add(pr)
+        created.append(pr.pr_no)
+    db.commit()
+    return {"created": created, "total": len(created)}
+
+
 def start_scheduler() -> None:
     global _scheduler
     if not settings.SCHEDULER_ENABLED:
@@ -181,8 +223,13 @@ def start_scheduler() -> None:
         minutes=settings.SCHEDULER_INTEGRATION_RETRY_MINUTES,
         id="retry_safety_sync", replace_existing=True,
     )
+    _scheduler.add_job(
+        auto_generate_purchase_requests, "interval",
+        hours=settings.SCHEDULER_PR_AUTO_HOURS,
+        id="auto_generate_purchase_requests", replace_existing=True,
+    )
     _scheduler.start()
-    logger.info("[scheduler] 已启动，注册 4 个 job")
+    logger.info("[scheduler] 已启动，注册 5 个 job")
 
 
 def shutdown_scheduler() -> None:
@@ -215,6 +262,7 @@ _JOBS = {
     "sweep_missed_tasks": sweep_missed_tasks,
     "auto_generate_tasks": auto_generate_tasks,
     "retry_safety_sync": retry_safety_sync,
+    "auto_generate_purchase_requests": auto_generate_purchase_requests,
 }
 
 
