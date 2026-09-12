@@ -179,7 +179,7 @@ export default function OperationTicketList() {
   }
 
   const stepProgress = (steps: OperationStep[]) => {
-    const done = steps.filter(s => s.result).length
+    const done = steps.filter(s => s.result === 'PASS').length
     return `${done}/${steps.length}`
   }
 
@@ -290,11 +290,12 @@ export default function OperationTicketList() {
               <Descriptions.Item label="备注" span={2}>{detail.notes || '-'}</Descriptions.Item>
             </Descriptions>
 
+            {detail.steps.some(s => s.result === 'FAIL') && <Text type="danger">步骤未通过，已停止后续执行。请主管核实并作废后重新开票。</Text>}
             <Divider orientation="left">步骤（{stepProgress(detail.steps || [])}）</Divider>
             <Steps
               direction="vertical"
               size="small"
-              current={(detail.steps || []).findIndex((s) => !s.result)}
+              current={(detail.steps || []).findIndex((s) => s.result !== 'PASS')}
               items={(detail.steps || []).map((s) => ({
                 title: `${s.seq}. ${s.action}`,
                 description: (
@@ -307,7 +308,9 @@ export default function OperationTicketList() {
                         {s.notes && <Text type="secondary">{s.notes}</Text>}
                       </Space>
                     )}
-                    {inspector && detail.status === 'EXECUTING' && !s.result && (
+                    {inspector && detail.status === 'EXECUTING' && !s.result &&
+                      !detail.steps.some(step => step.result === 'FAIL') &&
+                      detail.steps.find(step => !step.result)?.seq === s.seq && (
                       <Button size="small" type="primary" onClick={() => { setCurrentStep(s); setStepOpen(true) }}>执行</Button>
                     )}
                   </Space>

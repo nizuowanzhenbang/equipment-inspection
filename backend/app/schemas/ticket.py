@@ -1,7 +1,7 @@
 """两票 schemas"""
 from datetime import datetime
-from typing import Optional, List, Any
-from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Any, Literal
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.ticket import (
     WorkTicketType, WorkTicketStatus,
@@ -120,8 +120,8 @@ class OperationTicketUpdate(BaseModel):
 
 
 class StepExecute(BaseModel):
-    seq: int
-    result: str
+    seq: int = Field(gt=0)
+    result: Literal["PASS", "FAIL"]
     notes: Optional[str] = None
     signature_password: Optional[str] = None
 

@@ -1,4 +1,5 @@
 """操作票 API：DRAFT → REVIEWED → APPROVED → EXECUTING → COMPLETED"""
+from copy import deepcopy
 from datetime import datetime
 from typing import Optional
 
@@ -23,6 +24,23 @@ from app.utils.signature import assert_password, append_signature, make_signatur
 router = APIRouter(prefix="/api/operation-tickets", tags=["操作票"])
 
 
+def _normalize_steps(raw_steps: list[dict]) -> list[dict]:
+    """草稿只接收步骤定义，执行结果必须由签名接口产生。"""
+    if not raw_steps:
+        raise HTTPException(400, "至少要有一条操作步骤")
+    steps = []
+    for i, step in enumerate(raw_steps, 1):
+        seq = step.get("seq", i)
+        if type(seq) is not int or seq != i:
+            raise HTTPException(400, "步骤序号必须从 1 开始连续递增")
+        action = step.get("action")
+        if not isinstance(action, str) or not action.strip():
+            raise HTTPException(400, "操作步骤内容不能为空")
+        steps.append({"seq": i, "action": action.strip(), "expected": step.get("expected"),
+                      "result": None, "notes": None, "executed_at": None, "executed_by": None})
+    return steps
+
+
 # ---- 模板 API（必须在 /{oid} 之前注册以避免冲突）----
 @router.get("/templates")
 def list_templates(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -36,12 +54,7 @@ def create_template(payload: OperationTemplateCreate, db: Session = Depends(get_
         raise HTTPException(400, f"模板名 {payload.name} 已存在")
     if not payload.steps:
         raise HTTPException(400, "至少要有一条步骤")
-    steps = []
-    for i, s in enumerate(payload.steps, 1):
-        s = dict(s)
-        s["seq"] = s.get("seq") or i
-        s.setdefault("expected", None)
-        steps.append({"seq": s["seq"], "action": s.get("action", ""), "expected": s.get("expected")})
+    steps = _normalize_steps(payload.steps)
     t = OperationTemplate(
         name=payload.name,
         operation_type=payload.operation_type,
@@ -140,17 +153,7 @@ def create_ticket(payload: OperationTicketCreate, db: Session = Depends(get_db),
     if not raw_steps:
         raise HTTPException(400, "至少要有一条操作步骤（或选用模板）")
 
-    # 规范化步骤 seq
-    steps = []
-    for i, s in enumerate(raw_steps, 1):
-        s = dict(s)
-        s["seq"] = s.get("seq") or i
-        s.setdefault("expected", None)
-        s.setdefault("executed_at", None)
-        s.setdefault("executed_by", None)
-        s.setdefault("result", None)
-        s.setdefault("notes", None)
-        steps.append(s)
+    steps = _normalize_steps(raw_steps)
 
     next_seq = (
         db.query(func.count(OperationTicket.id))
@@ -192,7 +195,10 @@ def update_ticket(oid: int, payload: OperationTicketUpdate, db: Session = Depend
         raise HTTPException(404, "操作票不存在")
     if o.status != OperationTicketStatus.DRAFT:
         raise HTTPException(400, f"状态 {o.status.value} 不可编辑")
-    for f, v in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if "steps" in changes:
+        changes["steps"] = _normalize_steps(changes["steps"])
+    for f, v in changes.items():
         setattr(o, f, v)
     db.commit()
     db.refresh(o)
@@ -256,7 +262,8 @@ def execute_step(oid: int, payload: StepExecute, db: Session = Depends(get_db), 
         raise HTTPException(404, "操作票不存在")
     if o.status != OperationTicketStatus.EXECUTING:
         raise HTTPException(400, f"状态 {o.status.value} 不可执行步骤")
-    steps = list(o.steps or [])
+    # 独立复制嵌套 JSON，保证 SQLAlchemy 检测到变更并写入数据库。
+    steps = deepcopy(o.steps or [])
     matched = None
     for s in steps:
         if s.get("seq") == payload.seq:
@@ -264,6 +271,13 @@ def execute_step(oid: int, payload: StepExecute, db: Session = Depends(get_db), 
             break
     if matched is None:
         raise HTTPException(400, f"未找到 seq={payload.seq} 步骤")
+    if matched.get("result"):
+        raise HTTPException(409, "已记录的步骤不可覆盖")
+    if any(s.get("result") == "FAIL" for s in steps):
+        raise HTTPException(409, "存在失败步骤，须由主管处置并作废后重新开票")
+    first_pending = next((s for s in steps if not s.get("result")), None)
+    if first_pending is not matched:
+        raise HTTPException(409, "必须按步骤顺序执行")
     assert_password(current, payload.signature_password)
     matched["result"] = payload.result.upper()
     matched["notes"] = payload.notes
@@ -275,7 +289,7 @@ def execute_step(oid: int, payload: StepExecute, db: Session = Depends(get_db), 
     matched["sig_hash"] = step_sig["sig_hash"]
     o.signatures = append_signature(o.signatures, step_sig)
     # 全部完成 → COMPLETED
-    if all(s.get("result") for s in steps):
+    if steps and all(s.get("result") == "PASS" for s in steps):
         o.status = OperationTicketStatus.COMPLETED
         o.completed_at = datetime.utcnow()
         done_sig = make_signature(o.ticket_no, "complete", current.username)
