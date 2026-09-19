@@ -1,7 +1,7 @@
 """点检任务 + 点检记录模型"""
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Enum, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Enum, DateTime, Text, ForeignKey, JSON, Index
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -49,6 +49,7 @@ class PointStatus(str, enum.Enum):
 class InspectionRecord(Base):
     """单个测点的检查记录"""
     __tablename__ = "inspection_records"
+    __table_args__ = (Index('uq_inspection_record_task_point', 'task_id', 'point_id', unique=True),)
 
     id = Column(Integer, primary_key=True, index=True)
     task_id = Column(Integer, ForeignKey("inspection_tasks.id"), nullable=False, index=True)

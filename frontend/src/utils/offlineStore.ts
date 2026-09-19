@@ -20,7 +20,9 @@ export interface QueuedRecord {
   id?: number               // IDB 自增主键
   task_id: number
   point_id: number
-  status: 'NORMAL' | 'ABNORMAL' | 'SEVERE' | 'SKIPPED'
+  status: 'NORMAL' | 'ABNORMAL' | 'SEVERE'
+  owner?: string            // 入队账户；旧数据缺失时保留待人工核对
+  blocked?: boolean         // 业务冲突/无效输入停止自动重试
   readings?: Record<string, any>
   finding?: string
   photo_url?: string
@@ -59,16 +61,21 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 export async function enqueueRecord(record: Omit<QueuedRecord, 'id' | 'retry' | 'created_at'>): Promise<number> {
+  const owner = localStorage.getItem('username')
+  if (!owner) throw new Error('请先登录后再录入离线记录')
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction('queue', 'readwrite')
     const store = tx.objectStore('queue')
     const req = store.add({
       ...record,
+      owner,
+      blocked: false,
       retry: 0,
       created_at: new Date().toISOString(),
     } as QueuedRecord)
-    req.onsuccess = () => resolve(req.result as number)
+    tx.oncomplete = () => resolve(req.result as number)
+    tx.onabort = () => reject(tx.error)
     req.onerror = () => reject(req.error)
   })
 }
@@ -93,7 +100,7 @@ export async function removeQueued(id: number): Promise<void> {
   })
 }
 
-export async function bumpRetry(id: number, err: string): Promise<void> {
+export async function bumpRetry(id: number, err: string, blocked = false): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction('queue', 'readwrite')
@@ -104,6 +111,7 @@ export async function bumpRetry(id: number, err: string): Promise<void> {
       if (!r) return resolve()
       r.retry = (r.retry || 0) + 1
       r.last_error = err
+      r.blocked = blocked
       store.put(r)
     }
     tx.oncomplete = () => resolve()
@@ -141,13 +149,25 @@ export async function clearCachedTasks(): Promise<void> {
   })
 }
 
-/** 在线后批量重放队列，返回 {success, failed, remaining} */
-export async function syncQueue(): Promise<{ success: number; failed: number; remaining: number }> {
+type SyncResult = { success: number; failed: number; remaining: number }
+let inFlight: Promise<SyncResult> | null = null
+
+/** 同一页面的自动/手动同步共享批次，跨标签页由后端幂等保护。 */
+export function syncQueue(): Promise<SyncResult> {
+  if (!inFlight) inFlight = syncBatch().finally(() => { inFlight = null })
+  return inFlight
+}
+
+async function syncBatch(): Promise<SyncResult> {
   const queued = await listQueue()
   let success = 0
   let failed = 0
   const token = localStorage.getItem('token')
+  const owner = localStorage.getItem('username')
+  if (!token || !owner) return { success: 0, failed: 0, remaining: queued.length }
   for (const item of queued) {
+    if (item.blocked || item.owner !== owner) continue
+    if (localStorage.getItem('token') !== token || localStorage.getItem('username') !== owner) break
     try {
       const resp = await fetch(`/api/tasks/${item.task_id}/records`, {
         method: 'POST',
@@ -165,8 +185,10 @@ export async function syncQueue(): Promise<{ success: number; failed: number; re
       })
       if (!resp.ok) {
         const text = await resp.text().catch(() => '')
-        await bumpRetry(item.id!, `HTTP ${resp.status} ${text}`)
+        const blocked = [400, 404, 409, 422].includes(resp.status)
+        await bumpRetry(item.id!, `HTTP ${resp.status} ${text}`, blocked)
         failed += 1
+        if (resp.status === 401 || resp.status === 403) break
         continue
       }
       await removeQueued(item.id!)

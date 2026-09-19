@@ -91,7 +91,7 @@ export default function OfflineQueue() {
         <Space>
           <Button icon={<ReloadOutlined />} onClick={reload} />
           <Button icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>离线录入</Button>
-          <Button type="primary" icon={<CloudUploadOutlined />} disabled={!online || rows.length === 0} onClick={sync}>
+          <Button type="primary" icon={<CloudUploadOutlined />} loading={loading} disabled={!online || rows.length === 0} onClick={sync}>
             一键同步</Button>
         </Space>
       }
@@ -101,6 +101,7 @@ export default function OfflineQueue() {
         showIcon
         style={{ marginBottom: 16 }}
         message="弱网/无网现场也可录入点检记录：所有结果先入 IndexedDB 队列，恢复网络后自动批量上传。"
+        description="仅同步当前账户的记录。内容冲突或无效记录保留待核对；旧版无账户记录请核实来源后重新录入。删除前请确认已保存原始信息。"
       />
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={6}><Card><Statistic title="待同步" value={rows.length} /></Card></Col>
@@ -117,6 +118,10 @@ export default function OfflineQueue() {
           { title: '#', dataIndex: 'id', width: 60 },
           { title: '任务', dataIndex: 'task_id', width: 80 },
           { title: '测点', dataIndex: 'point_id', width: 80 },
+          { title: '录入账户', dataIndex: 'owner', render: (v) => v || '旧记录：待核对' },
+          { title: '同步状态', render: (_: any, r: QueuedRecord) => r.blocked
+            ? <Tag color="red">待人工核对</Tag>
+            : r.owner !== localStorage.getItem('username') ? <Tag>等待原账户</Tag> : <Tag color="blue">待同步</Tag> },
           { title: '状态', dataIndex: 'status', width: 100,
             render: (s) => <Tag color={s === 'NORMAL' ? 'green' : s === 'ABNORMAL' ? 'orange' : s === 'SEVERE' ? 'red' : 'default'}>{s}</Tag> },
           { title: '发现', dataIndex: 'finding', ellipsis: true },
@@ -143,7 +148,6 @@ export default function OfflineQueue() {
               { label: '正常', value: 'NORMAL' },
               { label: '异常', value: 'ABNORMAL' },
               { label: '严重', value: 'SEVERE' },
-              { label: '跳过', value: 'SKIPPED' },
             ]} />
           </Form.Item>
           <Form.Item name="finding" label="发现">

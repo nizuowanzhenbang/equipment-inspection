@@ -41,3 +41,5 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Type check and production build
         run: npm run build
+      - name: Offline queue regression tests
+        run: npm test
