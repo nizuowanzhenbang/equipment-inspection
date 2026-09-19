@@ -1,5 +1,6 @@
 """点检任务 + 记录 API（点检异常自动联动生成缺陷）"""
 from datetime import datetime, timedelta
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -159,10 +160,28 @@ def submit_record(
     tid: int, payload: RecordSubmit,
     db: Session = Depends(get_db), current: User = Depends(require_inspector),
 ):
-    """提交一个测点的检查结果。若异常自动生成缺陷工单，并联回 record.defect_id。"""
+    """以任务+测点作为业务幂等键；同人同内容重传返回原记录。"""
+    # 显式写锁串行化同任务提交；SQLite 为数据库写锁，PostgreSQL 为行锁。
+    # 自赋值避免更新审计时间；锁与记录、缺陷、健康度修改处于同一事务。
+    db.query(InspectionTask).filter(InspectionTask.id == tid).update(
+        {InspectionTask.updated_at: InspectionTask.updated_at}, synchronize_session=False,
+    )
     t = db.query(InspectionTask).filter(InspectionTask.id == tid).first()
     if not t:
         raise HTTPException(404, "任务不存在")
+    existing = db.query(InspectionRecord).filter(
+        InspectionRecord.task_id == tid, InspectionRecord.point_id == payload.point_id,
+    ).first()
+    if existing:
+        identical = existing.recorded_by == current.username and all(
+            getattr(existing, field) == getattr(payload, field)
+            for field in ('status', 'finding', 'photo_url')
+        ) and json.dumps(existing.readings, sort_keys=True) == json.dumps(payload.readings, sort_keys=True)
+        if not identical:
+            raise HTTPException(409, "该测点已有其他内容或人员的记录，请核对；原记录未被覆盖")
+        data = _record_to_dict(existing)
+        db.rollback()  # 只读重放，释放写锁，不重新触发业务副作用。
+        return api_response(message="已确认此前录入的记录", data=data)
     if t.status not in (TaskStatus.PENDING, TaskStatus.IN_PROGRESS):
         raise HTTPException(400, f"任务状态 {t.status.value}，不可录入")
 
@@ -174,11 +193,6 @@ def submit_record(
     )
     if not point:
         raise HTTPException(400, "测点不属于本任务路线")
-    if db.query(InspectionRecord).filter(
-        InspectionRecord.task_id == tid, InspectionRecord.point_id == payload.point_id
-    ).first():
-        raise HTTPException(400, "该测点已录入过")
-
     # 任务变为进行中
     if t.status == TaskStatus.PENDING:
         t.status = TaskStatus.IN_PROGRESS

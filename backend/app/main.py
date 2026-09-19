@@ -29,6 +29,7 @@ from app.api import (
     spare_parts, users, audit, purchase_requests,
 )
 from app.api.deps import hash_password
+from app.record_schema import ensure_record_uniqueness
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.realtime import manager as ws_manager, ws_endpoint
 
@@ -82,6 +83,7 @@ def _auto_migrate(db) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_record_uniqueness(engine)
     db = SessionLocal()
     try:
         _auto_migrate(db)
