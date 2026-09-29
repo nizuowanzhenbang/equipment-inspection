@@ -66,7 +66,7 @@ def pg_context(pg_engine, monkeypatch):
         db.add_all([
             User(username=name, role=role, is_active=True, hashed_password='unused-token-test')
             for name, role in [('inspector', UserRole.INSPECTOR), ('other', UserRole.INSPECTOR),
-                               ('viewer', UserRole.VIEWER)]
+                               ('viewer', UserRole.VIEWER), ('supervisor', UserRole.SUPERVISOR)]
         ])
         db.flush()
         point = InspectionPoint(point_no='PG-PT', route_id=route.id, equipment_id=equipment.id, check_items=[])
@@ -84,6 +84,7 @@ def pg_context(pg_engine, monkeypatch):
     previous = app.dependency_overrides.copy()
     app.dependency_overrides[get_db] = test_db
     context.headers = {'Authorization': f'Bearer {create_access_token("inspector")}'}
+    context.supervisor_headers = {'Authorization': f'Bearer {create_access_token("supervisor")}'}
     context.client = TestClient(app, raise_server_exceptions=False, headers=context.headers)
     context.payload = {'point_id': context.point_id, 'status': 'ABNORMAL',
                        'finding': '温度偏高', 'readings': {'temperature': 85}}

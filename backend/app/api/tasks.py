@@ -18,6 +18,7 @@ from app.schemas.task import TaskGenerate, TaskResponse, RecordSubmit, RecordRes
 from app.utils.helpers import api_response, paginate_response, generate_task_no, generate_defect_no
 from app.integration.safety_client import mark_pending, push_one, should_sync
 from app.realtime import emit_defect_critical, emit_safety_synced, emit_safety_failed
+from app.utils.transactions import lock_equipment
 
 router = APIRouter(prefix="/api/tasks", tags=["点检任务"])
 
@@ -213,7 +214,9 @@ def submit_record(
 
     # 异常 → 自动生成缺陷
     if payload.status in (PointStatus.ABNORMAL, PointStatus.SEVERE):
-        eq = point.equipment
+        eq = lock_equipment(db, point.equipment_id)
+        if not eq:
+            raise HTTPException(404, "设备不存在")
         severity = _decide_severity(eq, payload.status)
         title = f"[点检] {eq.name} - {payload.finding or '发现异常'}"[:200]
         defect = Defect(

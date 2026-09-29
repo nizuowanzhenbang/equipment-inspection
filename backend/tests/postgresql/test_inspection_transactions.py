@@ -1,51 +1,14 @@
 """Inspect real committed API results, including deliberately overlapping transactions."""
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
-from threading import Barrier
-
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import create_access_token
-from app.main import app
 from app.models.defect import Defect
-from app.models.equipment import Equipment
+from app.models.equipment import Equipment, EquipmentStatus
 from app.models.task import InspectionRecord, InspectionTask, TaskStatus
 from app.record_schema import ensure_record_uniqueness
-
-
-def post_concurrently(context, requests):
-    start = Barrier(len(requests))
-
-    def submit(request):
-        client = TestClient(app, raise_server_exceptions=False, headers=context.headers)
-        try:
-            start.wait(timeout=10)
-            path, body = request
-            return client.post(path, json=body)
-        finally:
-            client.close()
-
-    with ThreadPoolExecutor(max_workers=len(requests)) as pool:
-        return list(pool.map(submit, requests))
-
-
-@contextmanager
-def overlap_defect_inserts():
-    # Both real transactions have read their data before either inserts its defect.
-    # No SQL result or application behavior is mocked.
-    barrier = Barrier(2)
-
-    def wait_for_other_transaction(mapper, connection, target):
-        barrier.wait(timeout=10)
-
-    event.listen(Defect, 'before_insert', wait_for_other_transaction)
-    try:
-        yield
-    finally:
-        event.remove(Defect, 'before_insert', wait_for_other_transaction)
+from .concurrency import overlap_initial_reads, post_concurrently
 
 
 def test_concurrent_identical_replays_have_one_business_effect(pg_context):
@@ -90,17 +53,25 @@ def test_replay_does_not_bypass_account_or_role_checks(pg_context, username, exp
         assert db.get(Equipment, ctx.equipment_id).health_score == 97
 
 
-def test_different_tasks_accumulate_health_deductions_without_number_collision(pg_context):
+@pytest.mark.parametrize(('point_status', 'score', 'equipment_status'), [
+    ('ABNORMAL', 94, EquipmentStatus.RUNNING),
+    ('SEVERE', 84, EquipmentStatus.MAINTENANCE),
+])
+def test_different_tasks_accumulate_health_deductions_without_number_collision(
+    pg_context, point_status, score, equipment_status,
+):
     ctx = pg_context
-    with overlap_defect_inserts():
-        responses = post_concurrently(ctx, [(f'/api/tasks/{tid}/records', ctx.payload) for tid in ctx.task_ids])
+    body = {**ctx.payload, 'status': point_status}
+    with overlap_initial_reads(ctx.engine):
+        responses = post_concurrently(ctx, [(f'/api/tasks/{tid}/records', body) for tid in ctx.task_ids])
     assert [r.status_code for r in responses] == [200, 200], [r.text for r in responses]
     with ctx.factory() as db:
         assert db.query(InspectionRecord).count() == 2
         defects = db.query(Defect).all()
         assert len(defects) == 2
         assert len({d.defect_no for d in defects}) == 2
-        assert db.get(Equipment, ctx.equipment_id).health_score == 94
+        assert db.get(Equipment, ctx.equipment_id).health_score == score
+        assert db.get(Equipment, ctx.equipment_id).status == equipment_status
         assert all(t.status == TaskStatus.COMPLETED and t.abnormal_count == 1
                    for t in db.query(InspectionTask).all())
 
@@ -110,7 +81,7 @@ def test_manual_and_inspection_defect_numbers_do_not_race(pg_context, mixed_sour
     ctx = pg_context
     manual = ('/api/defects', {'equipment_id': ctx.equipment_id, 'title': '人工上报'})
     other = (f'/api/tasks/{ctx.task_ids[0]}/records', ctx.payload) if mixed_sources else manual
-    with overlap_defect_inserts():
+    with overlap_initial_reads(ctx.engine):
         responses = post_concurrently(ctx, [manual, other])
     assert [r.status_code for r in responses] == [200, 200], [r.text for r in responses]
     with ctx.factory() as db:
