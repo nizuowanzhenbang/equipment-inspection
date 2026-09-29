@@ -3,17 +3,18 @@ version: '3.9'
 # 发电厂设备点检与缺陷管理系统 v3.0 全栈编排
 # - backend: FastAPI (8003)
 # - frontend: nginx + React build (8080 → :80)
-# - postgres: 生产数据库
+# - postgres: 演示数据库
 # - minio: S3 兼容对象存储（用于 v3.0 上传）
 #
 # 启动：docker compose up -d --build
-# 默认账户：admin / admin123（见 backend/app/main.py:_create_default_users）
+# 此编排仅用于本地演示，包含公开示例凭证；正式环境见 docs/RUNTIME-SECURITY.md。
 
 services:
   backend:
     build: ./backend
     container_name: eq-inspect-backend
     environment:
+      APP_MODE: demo
       DATABASE_URL: postgresql+psycopg2://eq:eqpass@postgres:5432/equipment_inspection
       SECRET_KEY: change-me-in-production
       DEBUG: "false"

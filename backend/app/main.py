@@ -39,6 +39,8 @@ _ = (User, Equipment, InspectionRoute, InspectionPoint, InspectionTask, Inspecti
 
 
 def _create_default_users(db) -> None:
+    if settings.APP_MODE != 'demo':
+        return
     defaults = [
         ("admin",      "admin123",      UserRole.ADMIN,      "系统管理员"),
         ("inspector",  "inspector123",  UserRole.INSPECTOR,  "点检员"),
@@ -59,7 +61,7 @@ def _create_default_users(db) -> None:
         created.append(username)
     if created:
         db.commit()
-        print(f"[启动] 已创建默认账户：{', '.join(created)}")
+        print(f"[演示模式] 已创建演示账户：{', '.join(created)}；请勿用于正式环境")
 
 
 def _auto_migrate(db) -> None:

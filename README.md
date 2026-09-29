@@ -1,5 +1,9 @@
 # 电厂设备的数字工长 · 设备点检与缺陷管理系统
 
+## 持续迭代：明确区分演示与正式模式
+
+默认正式模式要求有效签名密钥，不自动创建固定密码账户。演示账户必须显式设置 `APP_MODE=demo`；正式模式使用独立命令初始化管理员。补充五角色接口矩阵、初始化事务与审计测试。[配置、初始化、升级注意事项](docs/RUNTIME-SECURITY.md)。
+
 ## 持续迭代：验收与点检的一致性
 
 同设备的异常点检、手动缺陷上报和验收共享事务写入顺序；等待后重新读取状态，避免重复验收、丢失恢复分数或用旧状态覆盖新点检。验收显式排除当前缺陷，只有没有其他未结缺陷时才恢复运行。[失败复现、加锁取舍与验证范围](docs/VERIFICATION-CONCURRENCY.md)。
@@ -86,14 +90,14 @@
 
 ## 🚀 快速开始
 
-### Docker Compose 一键启动（推荐）
+### Docker Compose 本地演示
 
 ```bash
 docker compose up -d --build
 # 前端 http://localhost:8080
 # 后端 http://localhost:8003/docs
 # MinIO 控制台 http://localhost:9001（minioadmin/minioadmin）
-# 默认账户 admin / admin123
+# 此编排显式使用 APP_MODE=demo；演示账户 admin / admin123
 ```
 
 ### 本地开发
@@ -102,6 +106,7 @@ docker compose up -d --build
 # 后端
 cd backend
 pip install -r requirements.txt
+cp .env.demo.example .env  # 仅限新目录；已有 .env 请手动设置 APP_MODE=demo，勿覆盖
 python seed_data.py      # 5 用户 + 18 设备 + 3 路线 + 一周任务 + 6 个典型缺陷
 uvicorn app.main:app --port 8003 --reload
 
@@ -111,7 +116,9 @@ npm install
 npm run dev              # http://localhost:5175
 ```
 
-## 🔐 默认账户
+PowerShell 可用 `Copy-Item .env.demo.example .env`（先确认没有现有 `.env`）。正式模式请按 [运行与账户说明](docs/RUNTIME-SECURITY.md) 配置密钥并初始化管理员。
+
+## 🔐 演示模式账户
 
 | 用户名 | 密码 | 角色 |
 |---|---|---|
@@ -121,7 +128,7 @@ npm run dev              # http://localhost:5175
 | `supervisor` | `supervisor123` | 设备主管（派工/验收） |
 | `viewer` | `viewer123` | 只读 |
 
-> 🔒 生产部署请务必删掉 seed 用户、改强密码、关掉 `--reload`。
+> 仅 `APP_MODE=demo` 创建以上账户。切换模式不会删除或重置既有用户；旧演示库需备份、检查并处理演示凭证后再考虑正式使用。
 
 ---
 

@@ -10,6 +10,16 @@ import { useAuthStore, ROLE_LABEL } from '../stores/auth'
 
 const { Text } = Typography
 
+const passwordRules = [
+  { required: true, message: '请输入密码' },
+  { validator: (_: unknown, value?: string) => {
+    if (!value || (Array.from(value).length >= 12 && new TextEncoder().encode(value).length <= 72)) {
+      return Promise.resolve()
+    }
+    return Promise.reject(new Error('密码至少 12 位，且 UTF-8 编码不超过 72 字节'))
+  } },
+]
+
 export default function UserManagement() {
   const role = useAuthStore((s) => s.role)
   const myUsername = useAuthStore((s) => s.username)
@@ -148,7 +158,7 @@ export default function UserManagement() {
       <Modal title="新增用户" open={createOpen} onOk={onCreate} onCancel={() => setCreateOpen(false)} width={520}>
         <Form form={createForm} layout="vertical" initialValues={{ role: 'INSPECTOR', is_active: true }}>
           <Form.Item name="username" label="用户名" rules={[{ required: true, min: 3, max: 50 }]}><Input /></Form.Item>
-          <Form.Item name="password" label="初始密码" rules={[{ required: true, min: 6 }]}>
+          <Form.Item name="password" label="初始密码" rules={passwordRules}>
             <Input.Password />
           </Form.Item>
           <Form.Item name="full_name" label="姓名"><Input /></Form.Item>
@@ -173,7 +183,7 @@ export default function UserManagement() {
       <Modal title={current ? `重置 ${current.username} 的密码` : '重置密码'}
         open={pwOpen} onOk={onResetPw} onCancel={() => setPwOpen(false)} width={480}>
         <Form form={pwForm} layout="vertical">
-          <Form.Item name="new_password" label="新密码" rules={[{ required: true, min: 6 }]}>
+          <Form.Item name="new_password" label="新密码" rules={passwordRules}>
             <Input.Password />
           </Form.Item>
         </Form>

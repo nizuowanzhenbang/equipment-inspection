@@ -1,9 +1,11 @@
 """应用配置"""
-from typing import List, Optional
+from typing import List, Literal, Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    APP_MODE: Literal['demo', 'production'] = 'production'
     DATABASE_URL: str = "sqlite:///./equipment_inspection.db"
     SECRET_KEY: str = "equipment-inspection-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
@@ -58,7 +60,33 @@ class Settings(BaseSettings):
     SCHEDULER_INTEGRATION_RETRY_MINUTES: int = 5  # plant-safety 推送重试
     SCHEDULER_PR_AUTO_HOURS: int = 12              # 备件采购申请自动生成间隔（小时）
 
-    model_config = {"env_file": ".env", "case_sensitive": True}
+    model_config = {"env_file": ".env", "case_sensitive": True, "hide_input_in_errors": True}
+
+    @model_validator(mode='after')
+    def validate_runtime(self):
+        if self.ALGORITHM != 'HS256':
+            raise ValueError('ALGORITHM must be HS256')
+        if self.APP_MODE == 'demo':
+            return self
+        placeholders = {
+            'equipment-inspection-secret-key-change-in-production',
+            'change-me-in-production', 'coal-integration-shared-secret',
+        }
+
+        def require_secret(name, value):
+            if len(value.strip()) < 32 or value.strip() in placeholders:
+                raise ValueError(f'{name} must be an independently generated secret of at least 32 characters')
+
+        require_secret('SECRET_KEY', self.SECRET_KEY)
+        if self.SIGNATURE_SECRET:
+            require_secret('SIGNATURE_SECRET', self.SIGNATURE_SECRET)
+        if self.DEBUG:
+            raise ValueError('DEBUG must be false in production')
+        if self.SAFETY_SYSTEM_URL:
+            require_secret('INTEGRATION_SECRET', self.INTEGRATION_SECRET)
+        if self.PROCUREMENT_SYSTEM_URL:
+            require_secret('PROCUREMENT_INTEGRATION_TOKEN', self.PROCUREMENT_INTEGRATION_TOKEN)
+        return self
 
 
 settings = Settings()

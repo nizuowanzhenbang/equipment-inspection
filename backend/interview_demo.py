@@ -122,7 +122,7 @@ def main():
     # 必须在导入 app/settings 之前强制隔离，覆盖 shell/.env 中的数据库和外部联动配置。
     with TemporaryDirectory(prefix='equipment-interview-') as directory:
         root = Path(directory)
-        os.environ.update(DATABASE_URL=f'sqlite:///{(root / "demo.db").as_posix()}',
+        os.environ.update(APP_MODE='demo', DATABASE_URL=f'sqlite:///{(root / "demo.db").as_posix()}',
                           UPLOAD_DIR=str(root / 'uploads'), SCHEDULER_ENABLED='false',
                           SAFETY_SYSTEM_URL='', PROCUREMENT_SYSTEM_URL='', STORAGE_BACKEND='local',
                           SECRET_KEY=secrets.token_hex(32), DEBUG='false')
