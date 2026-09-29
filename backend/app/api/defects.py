@@ -73,13 +73,8 @@ def create_defect(
     eq = db.query(Equipment).filter(Equipment.id == payload.equipment_id).first()
     if not eq:
         raise HTTPException(404, "设备不存在")
-    next_seq = (
-        db.query(func.count(Defect.id))
-        .filter(func.date(Defect.created_at) == datetime.utcnow().date())
-        .scalar() or 0
-    ) + 1
     d = Defect(
-        defect_no=generate_defect_no(next_seq),
+        defect_no=generate_defect_no(),
         equipment_id=eq.id,
         source=DefectSource.MANUAL,
         severity=payload.severity,

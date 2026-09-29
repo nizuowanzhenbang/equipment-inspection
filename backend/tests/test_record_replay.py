@@ -96,6 +96,39 @@ def test_viewer_cannot_replay_existing_record(context):
     assert client.post(f'/api/tasks/{tid}/records', json=payload(pid)).status_code == 403
 
 
+@pytest.mark.parametrize(('initial', 'expected'), [(0, 0), (2, 0), (3, 0), (100, 97)])
+def test_inspection_health_deduction_preserves_zero_and_lower_bound(context, initial, expected):
+    client, db, tid, pid, eid, _ = context
+    db.get(Equipment, eid).health_score = initial
+    db.commit()
+    response = client.post(f'/api/tasks/{tid}/records', json=payload(pid))
+    assert response.status_code == 200
+    db.expire_all()
+    assert db.get(Equipment, eid).health_score == expected
+
+
+@pytest.mark.parametrize('source', ['inspection', 'manual'])
+def test_new_defect_does_not_reuse_a_legacy_number_after_deletion(context, source):
+    _, db, tid, pid, eid, _ = context
+    # A deleted earlier row leaves today's sole row ending in 0002, not 0001.
+    db.add(Defect(defect_no=f'DF-{datetime.now():%Y%m%d}-0002', equipment_id=eid, title='原有缺陷'))
+    db.commit()
+    with_client = TestClient(app, raise_server_exceptions=False)
+    try:
+        if source == 'inspection':
+            response = with_client.post(f'/api/tasks/{tid}/records', json=payload(pid))
+        else:
+            response = with_client.post('/api/defects', json={'equipment_id': eid, 'title': '新缺陷'})
+        assert response.status_code == 200, response.text
+        db.expire_all()
+        defects = db.query(Defect).all()
+        assert len(defects) == 2
+        assert len({d.defect_no for d in defects}) == 2
+        assert all(len(d.defect_no) <= 50 for d in defects)
+    finally:
+        with_client.close()
+
+
 def test_database_rejects_duplicate_task_point_even_without_api(context):
     _, db, tid, pid, _, _ = context
     db.add_all([InspectionRecord(task_id=tid, point_id=pid), InspectionRecord(task_id=tid, point_id=pid)])

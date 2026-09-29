@@ -1,5 +1,9 @@
 # 电厂设备的数字工长 · 设备点检与缺陷管理系统
 
+## 持续迭代：PostgreSQL 并发写入验证
+
+新增真实 PostgreSQL 事务回归与独立 CI 检查，覆盖重传、内容冲突、账户/角色校验、不同任务并发、写入回滚及旧唯一索引升级。运行时缺陷单号改为 `DF-YYYYMMDD-<32 位 UUID>`，避免计数分配撞号；点检健康度在数据库内原子扣减，保留 0 分，避免不同任务相互覆盖。已有编号保留。[运行方式、兼容性与覆盖边界](docs/POSTGRESQL.md)。
+
 ## 求职展示更新：可靠离线点检
 
 同一账户、同一任务测点、同一内容重传可返回原记录；内容冲突返回 409 并保留原数据。数据库唯一索引与事务锁防止重复入账；离线队列绑定录入账户，并将冲突标记为待核对。
@@ -125,7 +129,7 @@ npm run dev              # http://localhost:5175
 | 设备状态 | RUNNING ⇄ STANDBY / MAINTENANCE → DECOMMISSIONED |
 | SLA | MINOR 72h / MAJOR 24h / CRITICAL 4h |
 | 健康度 | 初始 100，缺陷扣分（-3 / -8 / -15），验收回弹 |
-| 编号规则 | 设备 `EQ-{SYS}-NNNN` / 任务 `TK-YYYYMMDD-NNNN` / 缺陷 `DF-YYYYMMDD-NNNN` / 工作票 `WT-YYYYMMDD-NNNN` / 操作票 `OT-YYYYMMDD-NNNN` |
+| 编号规则 | 设备 `EQ-{SYS}-NNNN` / 任务 `TK-YYYYMMDD-NNNN` / 新缺陷 `DF-YYYYMMDD-<32 位 UUID>`（旧序号保留）/ 工作票 `WT-YYYYMMDD-NNNN` / 操作票 `OT-YYYYMMDD-NNNN` |
 
 ---
 
