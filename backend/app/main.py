@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import engine, SessionLocal
@@ -30,6 +31,7 @@ from app.api import (
 )
 from app.api.deps import hash_password
 from app.migrate import check_database, upgrade_database
+from app.observability import RequestLoggingMiddleware, database_ready, install_safe_server_logging
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.realtime import manager as ws_manager, ws_endpoint
 
@@ -83,6 +85,8 @@ async def lifespan(app: FastAPI):
     shutdown_scheduler()
 
 
+install_safe_server_logging()
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -102,7 +106,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(auth.router)
 app.include_router(equipments.router)
@@ -136,6 +142,13 @@ app.mount("/uploads", StaticFiles(directory=str(_upload_path)), name="uploads")
 @app.get("/health", tags=["系统"])
 def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.APP_VERSION}
+
+
+@app.get("/ready", tags=["系统"])
+def ready():
+    if database_ready(engine):
+        return {"status": "ready"}
+    return JSONResponse({"status": "not_ready"}, status_code=503)
 
 
 @app.get("/", tags=["系统"])

@@ -97,10 +97,10 @@
 ### Docker Compose 本地演示
 
 ```bash
-docker compose up -d --build
+docker compose -p equipment-demo up -d --build --wait
 # 前端 http://localhost:8080
 # 后端 http://localhost:8003/docs
-# MinIO 控制台 http://localhost:9001（minioadmin/minioadmin）
+# 默认本地上传存储；外部 S3/MinIO 配置见 docs/REPRODUCIBLE-DEPLOYMENT.md
 # 此编排显式使用 APP_MODE=demo；演示账户 admin / admin123
 ```
 
@@ -109,10 +109,10 @@ docker compose up -d --build
 ```bash
 # 后端
 cd backend
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 cp .env.demo.example .env  # 仅限新目录；已有 .env 请手动设置 APP_MODE=demo，勿覆盖
-python seed_data.py      # 5 用户 + 18 设备 + 3 路线 + 一周任务 + 6 个典型缺陷
-uvicorn app.main:app --port 8003 --reload
+python seed_data.py      # 5 用户 + 18 设备 + 3 路线 + 一周任务 + 8 个典型缺陷
+uvicorn app.main:app --port 8003 --reload --no-access-log
 
 # 前端
 cd frontend
@@ -238,3 +238,5 @@ PowerShell 可用 `Copy-Item .env.demo.example .env`（先确认没有现有 `.e
 ## 持续维护
 
 [开发与验收说明](docs/MAINTENANCE.md)：自动检查、回归测试与演示边界。
+
+部署、依赖锁和浏览器验收见 [可重复部署](docs/REPRODUCIBLE-DEPLOYMENT.md)。

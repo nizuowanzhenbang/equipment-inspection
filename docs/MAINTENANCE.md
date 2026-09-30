@@ -7,7 +7,7 @@
 在仓库根目录创建 Python 3.11 虚拟环境后执行：
 
 ```sh
-python -m pip install -r backend/requirements.txt pytest httpx ruff
+python -m pip install --require-hashes -r backend/requirements-dev.lock
 python -m ruff check backend --select E9,F63,F7,F82
 cd backend && python -m pytest tests -q
 cd frontend

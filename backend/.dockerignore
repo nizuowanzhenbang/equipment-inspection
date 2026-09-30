@@ -2,4 +2,8 @@ __pycache__
 *.db
 .venv
 .env
+.env.*
+tests
+*.xml
+.pytest_cache
 uploads
