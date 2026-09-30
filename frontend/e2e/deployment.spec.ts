@@ -18,7 +18,7 @@ test('browser login reads a persisted device through nginx and PostgreSQL', asyn
   await page.goto('/login')
   await page.getByPlaceholder('用户名', { exact: true }).fill('admin')
   await page.getByPlaceholder('密码', { exact: true }).fill('admin123')
-  await page.getByRole('button', { name: '登录' }).click()
+  await page.getByRole('button', { name: /^登\s*录$/ }).click()
   await expect(page).toHaveURL(/\/dashboard$/)
   const equipmentResponse = page.waitForResponse(response =>
     response.url().includes('/api/equipments?') && response.request().method() === 'GET',
