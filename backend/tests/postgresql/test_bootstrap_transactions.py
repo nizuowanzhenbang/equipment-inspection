@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.bootstrap_admin import bootstrap_admin
 from app.database import Base
+from app.migrate import upgrade_database
 from app.models.user import User, UserRole
 from app.models.audit import AuditLog
 
@@ -17,6 +18,9 @@ from app.models.audit import AuditLog
 def test_bootstrap_serializes_first_admin_creation(pg_engine, same_username, empty_schema):
     if empty_schema:
         Base.metadata.drop_all(pg_engine)
+        with pg_engine.begin() as conn:
+            conn.execute(text('DROP TABLE alembic_version'))
+        upgrade_database(pg_engine)
     factory = sessionmaker(bind=pg_engine)
     start = Barrier(2)
 

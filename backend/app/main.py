@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.database import engine, SessionLocal, Base
+from app.database import engine, SessionLocal
 
 # 注册所有模型（建表用，顺序不可缺）
 from app.models.user import User, UserRole
@@ -29,7 +29,7 @@ from app.api import (
     spare_parts, users, audit, purchase_requests,
 )
 from app.api.deps import hash_password
-from app.record_schema import ensure_record_uniqueness
+from app.migrate import check_database, upgrade_database
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.realtime import manager as ws_manager, ws_endpoint
 
@@ -64,31 +64,14 @@ def _create_default_users(db) -> None:
         print(f"[演示模式] 已创建演示账户：{', '.join(created)}；请勿用于正式环境")
 
 
-def _auto_migrate(db) -> None:
-    """SQLite 启动时 ALTER TABLE 补齐 v3.0 新增字段（生产环境请走 Alembic）"""
-    if not settings.DATABASE_URL.startswith("sqlite"):
-        return
-    from sqlalchemy import text
-    statements = [
-        "ALTER TABLE work_tickets ADD COLUMN signatures JSON",
-        "ALTER TABLE operation_tickets ADD COLUMN signatures JSON",
-    ]
-    for sql in statements:
-        try:
-            db.execute(text(sql))
-            db.commit()
-            print(f"[迁移] {sql}")
-        except Exception:
-            db.rollback()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    ensure_record_uniqueness(engine)
+    if settings.APP_MODE == 'demo':
+        upgrade_database(engine)
+    else:
+        check_database(engine)
     db = SessionLocal()
     try:
-        _auto_migrate(db)
         _create_default_users(db)
     finally:
         db.close()

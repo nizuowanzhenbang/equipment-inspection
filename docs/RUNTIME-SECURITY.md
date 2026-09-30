@@ -44,17 +44,18 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 配置 `APP_MODE=production`、新的 `SECRET_KEY`、目标 `DATABASE_URL`、实际前端 `ALLOWED_ORIGINS`。`SCHEDULER_ENABLED=false` 是示例初值，可在确认调度策略后开启。
 
 ```sh
+python -m app.migrate upgrade
 python -m app.bootstrap_admin --username operator
 uvicorn app.main:app --port 8003
 ```
 
 初始化命令在终端隐藏输入并确认密码。自动化可使用 `--password-stdin` 从受控管道输入一行；不要将密码写入命令行参数、脚本正文或共享日志。
 
-- 创建 User 和 AuditLog 所需表，其余表由现有应用启动流程创建；正式版本迁移仍待下一轮。
+- 必须先运行显式迁移；正式启动与管理员命令都检查数据库版本，不再自行建表。上一轮只含 User/AuditLog 的初始化库可由迁移入口识别并升级。
 - 同名活跃管理员已存在：成功返回“未改变”，不重置密码，也不重复记审计。
 - 同名普通/禁用账户：拒绝；已有其他管理员（含禁用）：拒绝，后续通过管理员用户管理创建账号。初始化命令不是账户恢复入口。
 - 首次创建与 `user.bootstrap` 审计在同一事务提交；审计写入失败则账户回滚。
-- SQLite 使用 BEGIN IMMEDIATE，PostgreSQL 使用事务 advisory lock，将建表和账户创建一起序列化。空库和已建表库上的两个并发初始化只产生一个管理员和一条审计；需在启动应用之前完成初始化，应用启动建表不参与此锁协议。
+- SQLite 使用 BEGIN IMMEDIATE，PostgreSQL 使用事务 advisory lock 序列化首管理员创建；迁移也使用同一锁。先完成迁移，再初始化账户，最后启动应用；两个并发账户初始化只产生一个管理员和一条审计。
 - 支持 SQLite 和 PostgreSQL。本轮没有修改既有账号、密码或角色的历史数据。
 
 ## 接口角色矩阵

@@ -6,7 +6,8 @@
 from datetime import datetime, timedelta, date
 from app.config import settings
 
-from app.database import Base, engine, SessionLocal
+from app.database import engine, SessionLocal
+from app.migrate import upgrade_database
 from app.api.deps import hash_password
 from app.models.user import User, UserRole
 from app.models.equipment import Equipment, EquipmentSystem, Criticality, EquipmentStatus
@@ -504,7 +505,7 @@ def seed_spare_parts(db):
 def main():
     if settings.APP_MODE != 'demo':
         raise SystemExit('seed_data requires APP_MODE=demo; no data changed')
-    Base.metadata.create_all(bind=engine)
+    upgrade_database(engine)
     db = SessionLocal()
     try:
         seed_users(db)

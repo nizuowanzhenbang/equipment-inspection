@@ -14,6 +14,7 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from app.api.deps import create_access_token, get_db
 from app.config import settings
 from app.database import Base
+from app.migrate import upgrade_database
 from app.main import app
 from app.models.equipment import Criticality, Equipment, EquipmentSystem
 from app.models.route import InspectionPoint, InspectionRoute
@@ -39,7 +40,7 @@ def pg_engine():
         with admin.begin() as conn:
             conn.execute(CreateSchema(schema))
         created = True
-        Base.metadata.create_all(engine)
+        upgrade_database(engine)
         yield engine
     finally:
         engine.dispose()

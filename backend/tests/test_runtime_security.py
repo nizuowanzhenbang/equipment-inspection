@@ -72,7 +72,10 @@ def test_lifespan_only_creates_accounts_in_demo(tmp_path, mode, expected):
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database import SessionLocal
+from app.database import engine
+from app.migrate import upgrade_database
 from app.models.user import User
+upgrade_database(engine)
 for _ in range(2):
     with TestClient(app):
         pass
@@ -89,6 +92,27 @@ def test_seed_refuses_production_before_creating_database(tmp_path):
     assert not (tmp_path / 'test.db').exists()
 
 
+def test_production_startup_refuses_unmigrated_database(tmp_path):
+    run = run_python(tmp_path, '''
+from fastapi.testclient import TestClient
+from app.main import app
+with TestClient(app):
+    pass
+''')
+    assert run.returncode != 0
+    assert 'app.migrate upgrade' in run.stderr
+    assert not (tmp_path / 'test.db').exists()
+
+
+def test_bootstrap_cli_refuses_unmigrated_database(tmp_path):
+    run = subprocess.run([sys.executable, '-m', 'app.bootstrap_admin', '--username', 'operator',
+                          '--password-stdin'], input=PASSWORD + '\n', cwd=tmp_path,
+                         env=isolated_env(tmp_path), text=True, encoding='utf-8', capture_output=True, timeout=45)
+    assert run.returncode != 0
+    assert 'app.migrate upgrade' in run.stderr
+    assert not (tmp_path / 'test.db').exists()
+
+
 def test_demo_seed_still_runs(tmp_path):
     run = subprocess.run([sys.executable, str(BACKEND / 'seed_data.py')], cwd=tmp_path,
                          env=isolated_env(tmp_path, 'demo'), text=True, encoding='utf-8',
@@ -101,6 +125,10 @@ def test_demo_seed_still_runs(tmp_path):
 
 
 def bootstrap(tmp_path, username='operator', password=PASSWORD):
+    migrated = subprocess.run([sys.executable, '-m', 'app.migrate', 'upgrade'], cwd=tmp_path,
+                              env=isolated_env(tmp_path), text=True, encoding='utf-8',
+                              capture_output=True, timeout=45)
+    assert migrated.returncode == 0, migrated.stderr
     return subprocess.run([sys.executable, '-m', 'app.bootstrap_admin', '--username', username,
                            '--password-stdin'], input=password + '\n', cwd=tmp_path,
                           env=isolated_env(tmp_path), text=True, encoding='utf-8',
@@ -141,8 +169,11 @@ def test_bootstrap_does_not_promote_existing_non_admin(tmp_path):
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database import SessionLocal
+from app.database import engine
+from app.migrate import upgrade_database
 from app.models.user import User, UserRole
 from app.api.deps import hash_password
+upgrade_database(engine)
 with TestClient(app):
     pass
 with SessionLocal() as db:

@@ -34,6 +34,8 @@ jobs:
     env:
       SCHEDULER_ENABLED: 'false'
       TEST_POSTGRESQL_URL: postgresql+psycopg2://portfolio_test:isolated_ci_password@127.0.0.1:5432/portfolio_test
+      PG_DUMP: /usr/lib/postgresql/16/bin/pg_dump
+      PG_RESTORE: /usr/lib/postgresql/16/bin/pg_restore
     services:
       postgres:
         image: postgres:16-alpine
@@ -55,6 +57,10 @@ jobs:
           python-version: '3.11'
       - name: Install application, test and PostgreSQL dependencies
         run: python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt -r backend/requirements-postgres.txt
+      - name: Install matching PostgreSQL backup clients
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
       - name: PostgreSQL transaction regression tests
         run: cd backend && python -m pytest tests/postgresql -q --junitxml=postgresql-results.xml
       - name: Preserve PostgreSQL test results

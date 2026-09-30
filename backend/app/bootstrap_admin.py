@@ -8,13 +8,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import hash_password
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal, engine
+from app.migrate import check_database
 from app.models.audit import AuditLog
 from app.models.user import User, UserRole
 
 
 def bootstrap_admin(db, username: str, password: str) -> bool:
-    """Caller supplies a fresh session. User and mandatory audit commit together."""
+    """Caller supplies a fresh session in a migrated database; user/audit commit together."""
     if not re.fullmatch(r'[A-Za-z0-9_.-]{3,50}', username):
         raise ValueError('Username must contain 3-50 ASCII letters, digits, dots, hyphens or underscores')
     if len(password) < 12 or len(password.encode('utf-8')) > 72:
@@ -27,8 +28,6 @@ def bootstrap_admin(db, username: str, password: str) -> bool:
         db.execute(text('SELECT pg_advisory_xact_lock(1789324101)'))
     else:
         raise ValueError('Bootstrap supports SQLite and PostgreSQL only')
-    # Hold the same lock across DDL and account creation, including an empty database.
-    Base.metadata.create_all(db.connection(), tables=[User.__table__, AuditLog.__table__])
     existing = db.query(User).filter(User.username == username).first()
     if existing:
         if existing.role == UserRole.ADMIN and existing.is_active:
@@ -54,6 +53,7 @@ def main():
     parser.add_argument('--password-stdin', action='store_true', help='Read one password line from a protected pipe')
     args = parser.parse_args()
     try:
+        check_database(engine)
         if args.password_stdin:
             password = sys.stdin.readline().rstrip('\r\n')
         else:
@@ -69,7 +69,7 @@ def main():
                 db.rollback()
                 raise
         print('Administrator created; audit recorded.' if created else 'Administrator already exists; unchanged.')
-    except ValueError as error:
+    except (ValueError, RuntimeError) as error:
         parser.exit(1, f'{error}\n')
     except SQLAlchemyError:
         # Database exceptions can include bound password hashes or connection details.
