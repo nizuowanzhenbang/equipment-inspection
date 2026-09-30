@@ -3,6 +3,7 @@ import { Card, Table, Tag, Space, Button, Statistic, Row, Col, Typography, Progr
 import { ThunderboltOutlined, ReloadOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import { predictiveApi } from '../api'
+import { formatPredictiveTooltip } from '../utils/chartTooltip'
 import type { PredictiveRiskItem } from '../types'
 import { SYSTEM_LABEL, CRITICALITY_LABEL, EquipmentSystem, Criticality } from '../types'
 
@@ -31,7 +32,7 @@ export default function PredictiveMaintenance() {
       trigger: 'item',
       formatter: (p: any) => {
         const d = p.data._raw as PredictiveRiskItem
-        return `${d.code} ${d.name}<br/>风险分 ${d.risk_score}<br/>失效概率=${(d.failure_probability * 100).toFixed(1)}%<br/>近 90 天缺陷 ${d.defects_90d}`
+        return formatPredictiveTooltip(d)
       },
     },
     grid: { left: 50, right: 30, top: 30, bottom: 50 },

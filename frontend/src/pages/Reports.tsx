@@ -32,7 +32,7 @@ export default function Reports() {
 
   const monthlyOption = {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['新增', '关闭', '平均处理时长(h)', 'SLA达成率(%)'] },
+    legend: { top: 0, data: ['新增', '关闭', '平均处理时长(h)', 'SLA达成率(%)'] },
     grid: { left: 50, right: 50, top: 40, bottom: 40 },
     xAxis: { type: 'category', data: monthly.map(m => m.month) },
     yAxis: [{ type: 'value', name: '数量' }, { type: 'value', name: '时长/%', position: 'right' }],
@@ -46,7 +46,7 @@ export default function Reports() {
 
   const availOption = {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['可用率(%)', '平均健康度'] },
+    legend: { top: 0, data: ['可用率(%)', '平均健康度'] },
     grid: { left: 50, right: 50, top: 40, bottom: 40 },
     xAxis: { type: 'category', data: avail.map(a => SYSTEM_LABEL[a.system as EquipmentSystem] || a.system) },
     yAxis: { type: 'value', min: 0, max: 100 },

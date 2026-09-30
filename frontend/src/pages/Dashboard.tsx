@@ -41,7 +41,7 @@ export default function Dashboard() {
 
   const trendOption = {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['新增缺陷', '关闭缺陷'] },
+    legend: { top: 0, data: ['新增缺陷', '关闭缺陷'] },
     grid: { left: 40, right: 20, top: 40, bottom: 40 },
     xAxis: { type: 'category', data: trend.map(t => t.date.slice(5)) },
     yAxis: { type: 'value' },
@@ -53,7 +53,7 @@ export default function Dashboard() {
 
   const sysOption = {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    legend: { data: ['设备数', '未关缺陷'] },
+    legend: { top: 0, data: ['设备数', '未关缺陷'] },
     grid: { left: 40, right: 20, top: 40, bottom: 60 },
     xAxis: { type: 'category', data: sysDist.map(s => SYSTEM_LABEL[s.system as keyof typeof SYSTEM_LABEL] || s.system), axisLabel: { rotate: 30 } },
     yAxis: { type: 'value' },
