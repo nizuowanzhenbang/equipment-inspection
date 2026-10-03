@@ -16,6 +16,7 @@ from app.schemas.spare_part import (
     MovementCreate, MovementResponse,
 )
 from app.utils.helpers import api_response, paginate_response, generate_spare_part_code
+from app.utils.transactions import lock_spare_part
 
 router = APIRouter(prefix="/api/spare-parts", tags=["备品备件"])
 
@@ -102,6 +103,9 @@ def create_movement(
     db: Session = Depends(get_db), current: User = Depends(require_repairman),
 ):
     p = db.query(SparePart).filter(SparePart.id == pid).first()
+    if not p:
+        raise HTTPException(404, "物料不存在")
+    p = lock_spare_part(db, pid)
     if not p:
         raise HTTPException(404, "物料不存在")
     if payload.qty <= 0:
