@@ -8,9 +8,10 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.database import engine, SessionLocal, Base
+from app.database import engine, SessionLocal
 
 # 注册所有模型（建表用，顺序不可缺）
 from app.models.user import User, UserRole
@@ -29,7 +30,8 @@ from app.api import (
     spare_parts, users, audit, purchase_requests,
 )
 from app.api.deps import hash_password
-from app.record_schema import ensure_record_uniqueness
+from app.migrate import check_database, upgrade_database
+from app.observability import RequestLoggingMiddleware, database_ready, install_safe_server_logging
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.realtime import manager as ws_manager, ws_endpoint
 
@@ -39,6 +41,8 @@ _ = (User, Equipment, InspectionRoute, InspectionPoint, InspectionTask, Inspecti
 
 
 def _create_default_users(db) -> None:
+    if settings.APP_MODE != 'demo':
+        return
     defaults = [
         ("admin",      "admin123",      UserRole.ADMIN,      "系统管理员"),
         ("inspector",  "inspector123",  UserRole.INSPECTOR,  "点检员"),
@@ -59,34 +63,17 @@ def _create_default_users(db) -> None:
         created.append(username)
     if created:
         db.commit()
-        print(f"[启动] 已创建默认账户：{', '.join(created)}")
-
-
-def _auto_migrate(db) -> None:
-    """SQLite 启动时 ALTER TABLE 补齐 v3.0 新增字段（生产环境请走 Alembic）"""
-    if not settings.DATABASE_URL.startswith("sqlite"):
-        return
-    from sqlalchemy import text
-    statements = [
-        "ALTER TABLE work_tickets ADD COLUMN signatures JSON",
-        "ALTER TABLE operation_tickets ADD COLUMN signatures JSON",
-    ]
-    for sql in statements:
-        try:
-            db.execute(text(sql))
-            db.commit()
-            print(f"[迁移] {sql}")
-        except Exception:
-            db.rollback()
+        print(f"[演示模式] 已创建演示账户：{', '.join(created)}；请勿用于正式环境")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    ensure_record_uniqueness(engine)
+    if settings.APP_MODE == 'demo':
+        upgrade_database(engine)
+    else:
+        check_database(engine)
     db = SessionLocal()
     try:
-        _auto_migrate(db)
         _create_default_users(db)
     finally:
         db.close()
@@ -97,6 +84,8 @@ async def lifespan(app: FastAPI):
     drain_task.cancel()
     shutdown_scheduler()
 
+
+install_safe_server_logging()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -117,7 +106,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(auth.router)
 app.include_router(equipments.router)
@@ -151,6 +142,13 @@ app.mount("/uploads", StaticFiles(directory=str(_upload_path)), name="uploads")
 @app.get("/health", tags=["系统"])
 def health():
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.APP_VERSION}
+
+
+@app.get("/ready", tags=["系统"])
+def ready():
+    if database_ready(engine):
+        return {"status": "ready"}
+    return JSONResponse({"status": "not_ready"}, status_code=503)
 
 
 @app.get("/", tags=["系统"])

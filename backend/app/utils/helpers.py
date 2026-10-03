@@ -1,6 +1,7 @@
 """通用工具"""
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 
 def api_response(data: Any = None, message: str = "ok", code: int = 200) -> dict:
@@ -48,8 +49,10 @@ def generate_task_no(seq: int) -> str:
     return f"TK-{datetime.now().strftime('%Y%m%d')}-{seq:04d}"
 
 
-def generate_defect_no(seq: int) -> str:
-    return f"DF-{datetime.now().strftime('%Y%m%d')}-{seq:04d}"
+def generate_defect_no(seq: int | None = None) -> str:
+    """运行时使用 UUID 避免计数分配竞争；显式序号仅用于兼容演示种子。"""
+    suffix = f"{seq:04d}" if seq is not None else uuid4().hex
+    return f"DF-{datetime.now().strftime('%Y%m%d')}-{suffix}"
 
 
 def generate_work_ticket_no(seq: int) -> str:

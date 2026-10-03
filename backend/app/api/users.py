@@ -4,7 +4,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_admin, hash_password, get_current_user
+from app.api.deps import get_db, require_admin, hash_password
+from app.config import settings
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, PasswordReset
 from app.utils.helpers import api_response, paginate_response
@@ -17,6 +18,12 @@ def _to_dict(u: User) -> dict:
     return UserResponse.model_validate(u).model_dump(mode="json")
 
 
+def _validate_password(password: str) -> None:
+    minimum = 12 if settings.APP_MODE == 'production' else 6
+    if len(password) < minimum or len(password.encode('utf-8')) > 72:
+        raise HTTPException(400, f"密码至少 {minimum} 位，且 UTF-8 编码不超过 72 字节")
+
+
 @router.get("")
 def list_users(
     page: int = Query(1, ge=1),
@@ -24,7 +31,7 @@ def list_users(
     role: Optional[UserRole] = None,
     keyword: Optional[str] = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ):
     q = db.query(User)
     if role:
@@ -41,8 +48,7 @@ def list_users(
 def create_user(payload: UserCreate, db: Session = Depends(get_db), current: User = Depends(require_admin)):
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(400, f"用户名 {payload.username} 已存在")
-    if len(payload.password) < 6:
-        raise HTTPException(400, "密码长度至少 6 位")
+    _validate_password(payload.password)
     u = User(
         username=payload.username,
         full_name=payload.full_name,
@@ -69,6 +75,8 @@ def update_user(uid: int, payload: UserUpdate, db: Session = Depends(get_db), cu
         raise HTTPException(400, "不能降级内置 admin 账户")
     if u.username == current.username and payload.is_active is False:
         raise HTTPException(400, "不能禁用自己")
+    if u.id == current.id and payload.role is not None and payload.role != UserRole.ADMIN:
+        raise HTTPException(400, "不能降级自己的管理员角色")
     for f, v in payload.model_dump(exclude_unset=True).items():
         setattr(u, f, v)
     db.commit()
@@ -81,8 +89,7 @@ def reset_password(uid: int, payload: PasswordReset, db: Session = Depends(get_d
     u = db.query(User).filter(User.id == uid).first()
     if not u:
         raise HTTPException(404, "用户不存在")
-    if len(payload.new_password) < 6:
-        raise HTTPException(400, "密码长度至少 6 位")
+    _validate_password(payload.new_password)
     u.hashed_password = hash_password(payload.new_password)
     audit_log(db, actor=current.username, action="user.reset_password",
               target_type="User", target_id=u.id, target_no=u.username,

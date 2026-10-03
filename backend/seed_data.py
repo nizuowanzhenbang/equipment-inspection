@@ -4,8 +4,10 @@
     python seed_data.py
 """
 from datetime import datetime, timedelta, date
+from app.config import settings
 
-from app.database import Base, engine, SessionLocal
+from app.database import engine, SessionLocal
+from app.migrate import upgrade_database
 from app.api.deps import hash_password
 from app.models.user import User, UserRole
 from app.models.equipment import Equipment, EquipmentSystem, Criticality, EquipmentStatus
@@ -56,6 +58,8 @@ EQUIPMENT_SEEDS = [
 
 
 def seed_users(db):
+    if settings.APP_MODE != 'demo':
+        raise RuntimeError('seed_data requires APP_MODE=demo')
     defaults = [
         ("admin",      "admin123",      UserRole.ADMIN,      "李大刚（设备部主任）"),
         ("inspector",  "inspector123",  UserRole.INSPECTOR,  "张师傅（点检员）"),
@@ -267,9 +271,8 @@ def seed_tasks_and_defects(db):
         eq = eq_by_name.get(eq_name)
         if not eq:
             return
-        seq = (db.query(Defect).count() or 0) + 1
         d = Defect(
-            defect_no=generate_defect_no(seq),
+            defect_no=generate_defect_no(),
             equipment_id=eq.id,
             source=DefectSource.INSPECTION,
             severity=sev, status=status,
@@ -500,7 +503,9 @@ def seed_spare_parts(db):
 
 
 def main():
-    Base.metadata.create_all(bind=engine)
+    if settings.APP_MODE != 'demo':
+        raise SystemExit('seed_data requires APP_MODE=demo; no data changed')
+    upgrade_database(engine)
     db = SessionLocal()
     try:
         seed_users(db)

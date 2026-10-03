@@ -1,5 +1,29 @@
 # 电厂设备的数字工长 · 设备点检与缺陷管理系统
 
+## 迭代更新：库存数量边界与恢复目标隔离
+
+库存写入要求有限非负数量、最多两位小数，并在事务锁内检查累计上限；盘点现在可将实际库存归零。恢复工具提前拒绝会被 PostgreSQL 客户端重新解释的特殊库名，保证预检和恢复指向同一数据库。[库存回归与边界](docs/STOCK-CONSISTENCY.md) · [恢复操作说明](docs/BACKUP-RESTORE.md) · [本次集成与验证](docs/RELEASE-BASELINE-20261003.md)。
+
+## 迭代更新：并发领料与采购到货
+
+同一备件的出入库和采购收货共用事务写锁，等锁后刷新库存及采购状态，避免并发领料漏扣库存、入库丢失更新或完成采购单重复收货。新增 SQLite 与真实 PostgreSQL 回归验证库存、流水和失败回滚。[复现、验证与面试讲解](docs/STOCK-CONSISTENCY.md)。
+
+## 持续迭代：数据库版本与隔离恢复
+
+新增冻结的 Alembic 基线及升级前结构检查；正式启动只检查版本，演示、种子数据使用同一升级入口。备份通过 SQLite backup API 或 PostgreSQL 快照导出，恢复必须使用独立空库，并核对散列、表行数与外键。[迁移矩阵](docs/DATABASE-MIGRATIONS.md) · [备份恢复](docs/BACKUP-RESTORE.md)。
+
+## 持续迭代：明确区分演示与正式模式
+
+默认正式模式要求有效签名密钥，不自动创建固定密码账户。演示账户必须显式设置 `APP_MODE=demo`；正式模式使用独立命令初始化管理员。补充五角色接口矩阵、初始化事务与审计测试。[配置、初始化、升级注意事项](docs/RUNTIME-SECURITY.md)。
+
+## 持续迭代：验收与点检的一致性
+
+同设备的异常点检、手动缺陷上报和验收共享事务写入顺序；等待后重新读取状态，避免重复验收、丢失恢复分数或用旧状态覆盖新点检。验收显式排除当前缺陷，只有没有其他未结缺陷时才恢复运行。[失败复现、加锁取舍与验证范围](docs/VERIFICATION-CONCURRENCY.md)。
+
+## 持续迭代：PostgreSQL 并发写入验证
+
+新增真实 PostgreSQL 事务回归与独立 CI 检查，覆盖重传、内容冲突、账户/角色校验、不同任务并发、写入回滚及旧唯一索引升级。运行时缺陷单号改为 `DF-YYYYMMDD-<32 位 UUID>`，避免计数分配撞号；点检健康度在数据库内原子扣减，保留 0 分，避免不同任务相互覆盖。已有编号保留。[运行方式、兼容性与覆盖边界](docs/POSTGRESQL.md)。
+
 ## 求职展示更新：可靠离线点检
 
 同一账户、同一任务测点、同一内容重传可返回原记录；内容冲突返回 409 并保留原数据。数据库唯一索引与事务锁防止重复入账；离线队列绑定录入账户，并将冲突标记为待核对。
@@ -78,14 +102,14 @@
 
 ## 🚀 快速开始
 
-### Docker Compose 一键启动（推荐）
+### Docker Compose 本地演示
 
 ```bash
-docker compose up -d --build
+docker compose -p equipment-demo up -d --build --wait
 # 前端 http://localhost:8080
 # 后端 http://localhost:8003/docs
-# MinIO 控制台 http://localhost:9001（minioadmin/minioadmin）
-# 默认账户 admin / admin123
+# 默认本地上传存储；外部 S3/MinIO 配置见 docs/REPRODUCIBLE-DEPLOYMENT.md
+# 此编排显式使用 APP_MODE=demo；演示账户 admin / admin123
 ```
 
 ### 本地开发
@@ -93,9 +117,10 @@ docker compose up -d --build
 ```bash
 # 后端
 cd backend
-pip install -r requirements.txt
-python seed_data.py      # 5 用户 + 18 设备 + 3 路线 + 一周任务 + 6 个典型缺陷
-uvicorn app.main:app --port 8003 --reload
+pip install --require-hashes -r requirements.lock
+cp .env.demo.example .env  # 仅限新目录；已有 .env 请手动设置 APP_MODE=demo，勿覆盖
+python seed_data.py      # 5 用户 + 18 设备 + 3 路线 + 一周任务 + 8 个典型缺陷
+uvicorn app.main:app --port 8003 --reload --no-access-log
 
 # 前端
 cd frontend
@@ -103,7 +128,9 @@ npm install
 npm run dev              # http://localhost:5175
 ```
 
-## 🔐 默认账户
+PowerShell 可用 `Copy-Item .env.demo.example .env`（先确认没有现有 `.env`）。正式模式请按 [运行与账户说明](docs/RUNTIME-SECURITY.md) 配置密钥并初始化管理员。
+
+## 🔐 演示模式账户
 
 | 用户名 | 密码 | 角色 |
 |---|---|---|
@@ -113,7 +140,7 @@ npm run dev              # http://localhost:5175
 | `supervisor` | `supervisor123` | 设备主管（派工/验收） |
 | `viewer` | `viewer123` | 只读 |
 
-> 🔒 生产部署请务必删掉 seed 用户、改强密码、关掉 `--reload`。
+> 仅 `APP_MODE=demo` 创建以上账户。切换模式不会删除或重置既有用户；旧演示库需备份、检查并处理演示凭证后再考虑正式使用。
 
 ---
 
@@ -125,7 +152,7 @@ npm run dev              # http://localhost:5175
 | 设备状态 | RUNNING ⇄ STANDBY / MAINTENANCE → DECOMMISSIONED |
 | SLA | MINOR 72h / MAJOR 24h / CRITICAL 4h |
 | 健康度 | 初始 100，缺陷扣分（-3 / -8 / -15），验收回弹 |
-| 编号规则 | 设备 `EQ-{SYS}-NNNN` / 任务 `TK-YYYYMMDD-NNNN` / 缺陷 `DF-YYYYMMDD-NNNN` / 工作票 `WT-YYYYMMDD-NNNN` / 操作票 `OT-YYYYMMDD-NNNN` |
+| 编号规则 | 设备 `EQ-{SYS}-NNNN` / 任务 `TK-YYYYMMDD-NNNN` / 新缺陷 `DF-YYYYMMDD-<32 位 UUID>`（旧序号保留）/ 工作票 `WT-YYYYMMDD-NNNN` / 操作票 `OT-YYYYMMDD-NNNN` |
 
 ---
 
@@ -219,3 +246,5 @@ npm run dev              # http://localhost:5175
 ## 持续维护
 
 [开发与验收说明](docs/MAINTENANCE.md)：自动检查、回归测试与演示边界。
+
+部署、依赖锁和浏览器验收见 [可重复部署](docs/REPRODUCIBLE-DEPLOYMENT.md)。

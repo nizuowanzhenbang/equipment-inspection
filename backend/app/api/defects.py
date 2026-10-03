@@ -19,6 +19,7 @@ from app.utils.helpers import api_response, paginate_response, generate_defect_n
 from app.integration.safety_client import mark_pending, push_one, should_sync
 from app.realtime import emit_defect_critical, emit_safety_synced, emit_safety_failed
 from app.utils.audit import log as audit_log
+from app.utils.transactions import lock_equipment
 
 router = APIRouter(prefix="/api/defects", tags=["缺陷工单"])
 
@@ -73,13 +74,11 @@ def create_defect(
     eq = db.query(Equipment).filter(Equipment.id == payload.equipment_id).first()
     if not eq:
         raise HTTPException(404, "设备不存在")
-    next_seq = (
-        db.query(func.count(Defect.id))
-        .filter(func.date(Defect.created_at) == datetime.utcnow().date())
-        .scalar() or 0
-    ) + 1
+    eq = lock_equipment(db, eq.id)
+    if not eq:
+        raise HTTPException(404, "设备不存在")
     d = Defect(
-        defect_no=generate_defect_no(next_seq),
+        defect_no=generate_defect_no(),
         equipment_id=eq.id,
         source=DefectSource.MANUAL,
         severity=payload.severity,
@@ -173,6 +172,11 @@ def verify(did: int, payload: DefectVerify, db: Session = Depends(get_db), curre
     d = db.query(Defect).options(joinedload(Defect.equipment)).filter(Defect.id == did).first()
     if not d:
         raise HTTPException(404, "缺陷不存在")
+    eq = lock_equipment(db, d.equipment_id)
+    # Refresh after waiting: another verifier may already have decided this defect.
+    d = db.query(Defect).filter(Defect.id == did).populate_existing().first()
+    if not d:
+        raise HTTPException(404, "缺陷不存在")
     if d.status != DefectStatus.REPAIRED:
         raise HTTPException(400, f"状态 {d.status.value} 不可验收")
     if payload.pass_:
@@ -182,17 +186,17 @@ def verify(did: int, payload: DefectVerify, db: Session = Depends(get_db), curre
         d.verify_notes = payload.verify_notes
         d.closed_at = datetime.utcnow()
         # 缺陷验收通过 → 若是该设备唯一未结缺陷，设备恢复运行 + 健康度回弹
-        eq = d.equipment
         if eq:
             open_count = (
                 db.query(func.count(Defect.id))
                 .filter(
                     Defect.equipment_id == eq.id,
+                    Defect.id != did,
                     Defect.status.notin_([DefectStatus.VERIFIED, DefectStatus.CLOSED, DefectStatus.CANCELLED]),
                 )
                 .scalar() or 0
             )
-            if open_count <= 1:  # 包括自己
+            if open_count == 0:
                 if eq.status == EquipmentStatus.MAINTENANCE:
                     eq.status = EquipmentStatus.RUNNING
             recover = 10 if d.severity == DefectSeverity.CRITICAL else (6 if d.severity == DefectSeverity.MAJOR else 3)

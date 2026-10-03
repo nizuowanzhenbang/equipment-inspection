@@ -4,7 +4,7 @@ import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db, get_current_user, require_inspector, require_write
@@ -18,6 +18,7 @@ from app.schemas.task import TaskGenerate, TaskResponse, RecordSubmit, RecordRes
 from app.utils.helpers import api_response, paginate_response, generate_task_no, generate_defect_no
 from app.integration.safety_client import mark_pending, push_one, should_sync
 from app.realtime import emit_defect_critical, emit_safety_synced, emit_safety_failed
+from app.utils.transactions import lock_equipment
 
 router = APIRouter(prefix="/api/tasks", tags=["点检任务"])
 
@@ -213,16 +214,13 @@ def submit_record(
 
     # 异常 → 自动生成缺陷
     if payload.status in (PointStatus.ABNORMAL, PointStatus.SEVERE):
-        eq = point.equipment
+        eq = lock_equipment(db, point.equipment_id)
+        if not eq:
+            raise HTTPException(404, "设备不存在")
         severity = _decide_severity(eq, payload.status)
-        next_seq = (
-            db.query(func.count(Defect.id))
-            .filter(func.date(Defect.created_at) == datetime.utcnow().date())
-            .scalar() or 0
-        ) + 1
         title = f"[点检] {eq.name} - {payload.finding or '发现异常'}"[:200]
         defect = Defect(
-            defect_no=generate_defect_no(next_seq),
+            defect_no=generate_defect_no(),
             equipment_id=eq.id,
             source=DefectSource.INSPECTION,
             severity=severity,
@@ -241,9 +239,13 @@ def submit_record(
         # SEVERE + 运行设备 → 转检修
         if payload.status == PointStatus.SEVERE and eq.status == EquipmentStatus.RUNNING:
             eq.status = EquipmentStatus.MAINTENANCE
-        # 健康度衰减
+        # 数据库内原子扣分，避免不同任务用各自读取的旧分数互相覆盖。
         decay = 15 if severity == DefectSeverity.CRITICAL else (8 if severity == DefectSeverity.MAJOR else 3)
-        eq.health_score = max(0, (eq.health_score or 100) - decay)
+        score = func.coalesce(Equipment.health_score, 100)
+        db.query(Equipment).filter(Equipment.id == eq.id).update(
+            {Equipment.health_score: case((score >= decay, score - decay), else_=0)},
+            synchronize_session=False,
+        )
         _critical_sync_target = defect if should_sync(defect) else None
     else:
         _critical_sync_target = None

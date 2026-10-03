@@ -1,0 +1,2 @@
+# Optional PostgreSQL driver, used by the real-database regression job.
+psycopg2-binary>=2.9,<3

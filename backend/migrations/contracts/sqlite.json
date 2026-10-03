@@ -1,0 +1,2040 @@
+{
+  "audit_logs": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "actor": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "action": {
+        "type": "VARCHAR(80)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "target_type": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "target_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "target_no": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "summary": {
+        "type": "VARCHAR(300)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "extra": {
+        "type": "JSON",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [],
+    "indexes": {
+      "ix_audit_logs_action": {
+        "columns": [
+          "action"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_audit_logs_actor": {
+        "columns": [
+          "actor"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_audit_logs_created_at": {
+        "columns": [
+          "created_at"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_audit_logs_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_audit_logs_target_id": {
+        "columns": [
+          "target_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_audit_logs_target_no": {
+        "columns": [
+          "target_no"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_audit_logs_target_type": {
+        "columns": [
+          "target_type"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "defects": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "defect_no": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "equipment_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "source": {
+        "type": "VARCHAR(10)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "severity": {
+        "type": "VARCHAR(8)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "status": {
+        "type": "VARCHAR(9)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "title": {
+        "type": "VARCHAR(200)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "description": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "photo_url": {
+        "type": "VARCHAR(300)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "reported_by": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "reported_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "assigned_to": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "assigned_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "assigned_by": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "repair_started_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "repair_completed_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "repair_notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "repair_cost": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "verified_by": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "verified_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "verify_notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "sla_deadline": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "closed_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "safety_sync_status": {
+        "type": "VARCHAR(20)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "safety_hazard_no": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "safety_sync_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "safety_sync_error": {
+        "type": "VARCHAR(300)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "safety_sync_attempts": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [
+      {
+        "columns": [
+          "equipment_id"
+        ],
+        "table": "equipments",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      }
+    ],
+    "indexes": {
+      "ix_defects_defect_no": {
+        "columns": [
+          "defect_no"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_defects_equipment_id": {
+        "columns": [
+          "equipment_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_defects_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_defects_severity": {
+        "columns": [
+          "severity"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_defects_status": {
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "equipments": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "code": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "name": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "equipment_system": {
+        "type": "VARCHAR(10)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "criticality": {
+        "type": "VARCHAR(1)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "location": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "model": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "manufacturer": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "install_date": {
+        "type": "DATE",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "status": {
+        "type": "VARCHAR(14)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "qr_code": {
+        "type": "VARCHAR(200)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "health_score": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [],
+    "indexes": {
+      "ix_equipments_code": {
+        "columns": [
+          "code"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_equipments_criticality": {
+        "columns": [
+          "criticality"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_equipments_equipment_system": {
+        "columns": [
+          "equipment_system"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_equipments_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_equipments_status": {
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "inspection_points": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "point_no": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "route_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "equipment_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "sequence": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "check_items": {
+        "type": "JSON",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "standard": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [
+      {
+        "columns": [
+          "equipment_id"
+        ],
+        "table": "equipments",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      },
+      {
+        "columns": [
+          "route_id"
+        ],
+        "table": "inspection_routes",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      }
+    ],
+    "indexes": {
+      "ix_inspection_points_equipment_id": {
+        "columns": [
+          "equipment_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_points_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_points_point_no": {
+        "columns": [
+          "point_no"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_points_route_id": {
+        "columns": [
+          "route_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "inspection_records": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "task_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "point_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "status": {
+        "type": "VARCHAR(8)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "readings": {
+        "type": "JSON",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "finding": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "photo_url": {
+        "type": "VARCHAR(300)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "recorded_by": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "recorded_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "defect_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [
+      {
+        "columns": [
+          "defect_id"
+        ],
+        "table": "defects",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      },
+      {
+        "columns": [
+          "point_id"
+        ],
+        "table": "inspection_points",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      },
+      {
+        "columns": [
+          "task_id"
+        ],
+        "table": "inspection_tasks",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      }
+    ],
+    "indexes": {
+      "ix_inspection_records_defect_id": {
+        "columns": [
+          "defect_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_records_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_records_point_id": {
+        "columns": [
+          "point_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_records_status": {
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_records_task_id": {
+        "columns": [
+          "task_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "uq_inspection_record_task_point": {
+        "columns": [
+          "task_id",
+          "point_id"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "inspection_routes": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "route_no": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "name": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "equipment_system": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "frequency": {
+        "type": "VARCHAR(7)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "estimated_duration": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "is_active": {
+        "type": "BOOLEAN",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [],
+    "indexes": {
+      "ix_inspection_routes_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_routes_route_no": {
+        "columns": [
+          "route_no"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "inspection_tasks": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "task_no": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "route_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "scheduled_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "started_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "completed_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "assigned_to": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "executed_by": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "status": {
+        "type": "VARCHAR(11)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "abnormal_count": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [
+      {
+        "columns": [
+          "route_id"
+        ],
+        "table": "inspection_routes",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      }
+    ],
+    "indexes": {
+      "ix_inspection_tasks_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_tasks_route_id": {
+        "columns": [
+          "route_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_tasks_scheduled_at": {
+        "columns": [
+          "scheduled_at"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_tasks_status": {
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_inspection_tasks_task_no": {
+        "columns": [
+          "task_no"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "operation_templates": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "name": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "operation_type": {
+        "type": "VARCHAR(9)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "description": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "steps": {
+        "type": "JSON",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "use_count": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_by": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [],
+    "indexes": {
+      "ix_operation_templates_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [
+      [
+        "name"
+      ]
+    ],
+    "checks": []
+  },
+  "operation_tickets": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "ticket_no": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "title": {
+        "type": "VARCHAR(200)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "operation_type": {
+        "type": "VARCHAR(9)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "work_ticket_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "equipment_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "operator": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "supervisor": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "approver": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "steps": {
+        "type": "JSON",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "status": {
+        "type": "VARCHAR(9)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "reviewed_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "approved_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "started_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "completed_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "signatures": {
+        "type": "JSON",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [
+      {
+        "columns": [
+          "equipment_id"
+        ],
+        "table": "equipments",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      },
+      {
+        "columns": [
+          "work_ticket_id"
+        ],
+        "table": "work_tickets",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      }
+    ],
+    "indexes": {
+      "ix_operation_tickets_equipment_id": {
+        "columns": [
+          "equipment_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_operation_tickets_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_operation_tickets_status": {
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_operation_tickets_ticket_no": {
+        "columns": [
+          "ticket_no"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_operation_tickets_work_ticket_id": {
+        "columns": [
+          "work_ticket_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "purchase_requests": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "pr_no": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "spare_part_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "qty": {
+        "type": "NUMERIC(10, 2)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "estimated_amount": {
+        "type": "NUMERIC(12, 2)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "urgency": {
+        "type": "VARCHAR(20)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "reason": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "source": {
+        "type": "VARCHAR(14)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "status": {
+        "type": "VARCHAR(9)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "applicant": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "approver": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "submitted_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "approved_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "rejected_reason": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "external_order_no": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "sent_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "received_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "received_qty": {
+        "type": "NUMERIC(10, 2)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [
+      {
+        "columns": [
+          "spare_part_id"
+        ],
+        "table": "spare_parts",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      }
+    ],
+    "indexes": {
+      "ix_purchase_requests_external_order_no": {
+        "columns": [
+          "external_order_no"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_purchase_requests_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_purchase_requests_pr_no": {
+        "columns": [
+          "pr_no"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_purchase_requests_spare_part_id": {
+        "columns": [
+          "spare_part_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_purchase_requests_status": {
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "spare_parts": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "code": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "name": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "spec": {
+        "type": "VARCHAR(200)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "unit": {
+        "type": "VARCHAR(20)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "category": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "stock_qty": {
+        "type": "NUMERIC(10, 2)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "min_qty": {
+        "type": "NUMERIC(10, 2)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "unit_price": {
+        "type": "NUMERIC(10, 2)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "location": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "supplier": {
+        "type": "VARCHAR(100)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [],
+    "indexes": {
+      "ix_spare_parts_code": {
+        "columns": [
+          "code"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_spare_parts_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "stock_movements": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "spare_part_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "movement_type": {
+        "type": "VARCHAR(6)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "qty": {
+        "type": "NUMERIC(10, 2)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "defect_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "work_ticket_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "operator": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [
+      {
+        "columns": [
+          "defect_id"
+        ],
+        "table": "defects",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      },
+      {
+        "columns": [
+          "spare_part_id"
+        ],
+        "table": "spare_parts",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      },
+      {
+        "columns": [
+          "work_ticket_id"
+        ],
+        "table": "work_tickets",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      }
+    ],
+    "indexes": {
+      "ix_stock_movements_created_at": {
+        "columns": [
+          "created_at"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_stock_movements_defect_id": {
+        "columns": [
+          "defect_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_stock_movements_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_stock_movements_movement_type": {
+        "columns": [
+          "movement_type"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_stock_movements_spare_part_id": {
+        "columns": [
+          "spare_part_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_stock_movements_work_ticket_id": {
+        "columns": [
+          "work_ticket_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "users": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "username": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "full_name": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "hashed_password": {
+        "type": "VARCHAR(200)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "role": {
+        "type": "VARCHAR(10)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "is_active": {
+        "type": "BOOLEAN",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [],
+    "indexes": {
+      "ix_users_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_users_username": {
+        "columns": [
+          "username"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  },
+  "work_tickets": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "ticket_no": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "ticket_type": {
+        "type": "VARCHAR(9)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "defect_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "equipment_id": {
+        "type": "INTEGER",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "work_content": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "safety_measures": {
+        "type": "JSON",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "risk_notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "planned_start": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "planned_end": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "actual_start": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "actual_end": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "applicant": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "principal": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "issuer": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "permitter": {
+        "type": "VARCHAR(50)",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "team_members": {
+        "type": "JSON",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "status": {
+        "type": "VARCHAR(9)",
+        "enum": null,
+        "nullable": false,
+        "default": null
+      },
+      "submitted_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "issued_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "permitted_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "completed_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "closed_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "approval_notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "closing_notes": {
+        "type": "TEXT",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "signatures": {
+        "type": "JSON",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "enum": null,
+        "nullable": true,
+        "default": null
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "foreign_keys": [
+      {
+        "columns": [
+          "defect_id"
+        ],
+        "table": "defects",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      },
+      {
+        "columns": [
+          "equipment_id"
+        ],
+        "table": "equipments",
+        "target": [
+          "id"
+        ],
+        "schema": null,
+        "options": {}
+      }
+    ],
+    "indexes": {
+      "ix_work_tickets_defect_id": {
+        "columns": [
+          "defect_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_work_tickets_equipment_id": {
+        "columns": [
+          "equipment_id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_work_tickets_id": {
+        "columns": [
+          "id"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_work_tickets_status": {
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "expressions": null,
+        "where": ""
+      },
+      "ix_work_tickets_ticket_no": {
+        "columns": [
+          "ticket_no"
+        ],
+        "unique": true,
+        "expressions": null,
+        "where": ""
+      }
+    },
+    "unique": [],
+    "checks": []
+  }
+}

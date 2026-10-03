@@ -14,8 +14,10 @@ from app.models.user import User
 from app.schemas.spare_part import (
     SparePartCreate, SparePartUpdate, SparePartResponse,
     MovementCreate, MovementResponse,
+    MAX_STOCK_QUANTITY,
 )
 from app.utils.helpers import api_response, paginate_response, generate_spare_part_code
+from app.utils.transactions import lock_spare_part
 
 router = APIRouter(prefix="/api/spare-parts", tags=["备品备件"])
 
@@ -104,7 +106,10 @@ def create_movement(
     p = db.query(SparePart).filter(SparePart.id == pid).first()
     if not p:
         raise HTTPException(404, "物料不存在")
-    if payload.qty <= 0:
+    p = lock_spare_part(db, pid)
+    if not p:
+        raise HTTPException(404, "物料不存在")
+    if payload.qty == 0 and payload.movement_type != StockMovementType.ADJUST:
         raise HTTPException(400, "数量必须为正")
     if payload.defect_id and not db.query(Defect).filter(Defect.id == payload.defect_id).first():
         raise HTTPException(404, "关联缺陷不存在")
@@ -112,7 +117,10 @@ def create_movement(
         raise HTTPException(404, "关联工作票不存在")
 
     if payload.movement_type == StockMovementType.IN:
-        p.stock_qty = (p.stock_qty or Decimal("0")) + payload.qty
+        new_stock = (p.stock_qty or Decimal("0")) + payload.qty
+        if new_stock > MAX_STOCK_QUANTITY:
+            raise HTTPException(400, "入库后库存超出数量上限")
+        p.stock_qty = new_stock
     elif payload.movement_type == StockMovementType.OUT:
         if (p.stock_qty or Decimal("0")) < payload.qty:
             raise HTTPException(400, f"库存不足，当前 {p.stock_qty}")

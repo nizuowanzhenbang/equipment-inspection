@@ -3,6 +3,7 @@
 流程：DRAFT → SUBMITTED → APPROVED/REJECTED → SENT（推送 fuel-procurement）→ RECEIVED（入库回填）
 """
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,8 +15,10 @@ from app.api.deps import get_db, get_current_user, require_write, require_superv
 from app.models.purchase_request import PurchaseRequest, PRStatus, PRSource
 from app.models.spare_part import SparePart, StockMovement, StockMovementType
 from app.models.user import User
+from app.schemas.spare_part import InventoryDecimal, MAX_STOCK_QUANTITY
 from app.utils.helpers import api_response, paginate_response, generate_pr_no
 from app.utils.audit import log as audit_log
+from app.utils.transactions import lock_spare_part
 from app.integration.procurement_client import push_request
 
 router = APIRouter(prefix="/api/purchase-requests", tags=["采购申请"])
@@ -37,7 +40,7 @@ class PRReject(BaseModel):
 
 
 class PRReceive(BaseModel):
-    received_qty: float
+    received_qty: InventoryDecimal
 
 
 class PRResponse(BaseModel):
@@ -240,24 +243,34 @@ def receive_pr(pid: int, payload: PRReceive, db: Session = Depends(get_db), curr
     pr = db.query(PurchaseRequest).options(joinedload(PurchaseRequest.spare_part)).filter(PurchaseRequest.id == pid).first()
     if not pr:
         raise HTTPException(404, "采购申请不存在")
-    if pr.status not in (PRStatus.SENT, PRStatus.APPROVED):
-        raise HTTPException(400, f"状态 {pr.status.value} 不可收货入库")
-    sp = pr.spare_part
+    sp = lock_spare_part(db, pr.spare_part_id)
     if not sp:
         raise HTTPException(404, "对应备件已被删除")
+    # Two receipts of the same order also share the part lock. Refresh its state
+    # after waiting so a completed order cannot pass the old eligibility check.
+    pr = db.query(PurchaseRequest).filter(PurchaseRequest.id == pid).populate_existing().first()
+    if not pr:
+        raise HTTPException(404, "采购申请不存在")
+    if pr.status not in (PRStatus.SENT, PRStatus.APPROVED):
+        raise HTTPException(400, f"状态 {pr.status.value} 不可收货入库")
     if payload.received_qty <= 0:
         raise HTTPException(400, "入库数量必须 > 0")
+    quantity = payload.received_qty
+    new_stock = (sp.stock_qty or Decimal("0")) + quantity
+    new_received = (pr.received_qty or Decimal("0")) + quantity
+    if new_stock > MAX_STOCK_QUANTITY or new_received > MAX_STOCK_QUANTITY:
+        raise HTTPException(400, "累计库存或收货数量超出上限")
     mv = StockMovement(
         spare_part_id=sp.id,
         movement_type=StockMovementType.IN,
-        qty=payload.received_qty,
+        qty=quantity,
         operator=current.username,
         notes=f"采购单 {pr.pr_no} 到货入库",
     )
-    sp.stock_qty = float(sp.stock_qty or 0) + float(payload.received_qty)
+    sp.stock_qty = new_stock
     pr.received_at = datetime.utcnow()
-    pr.received_qty = float(pr.received_qty or 0) + float(payload.received_qty)
-    if pr.received_qty >= float(pr.qty or 0):
+    pr.received_qty = new_received
+    if pr.received_qty >= (pr.qty or Decimal("0")):
         pr.status = PRStatus.RECEIVED
     db.add(mv)
     db.commit()

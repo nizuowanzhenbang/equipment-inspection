@@ -45,7 +45,7 @@ export default function LoginPage() {
           </Title>
           <Text type="secondary">设备 · 路线 · 点检 · 缺陷 · 检修闭环</Text>
         </div>
-        <Form onFinish={onFinish} layout="vertical" initialValues={{ username: 'admin' }}>
+        <Form onFinish={onFinish} layout="vertical">
           <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]}>
             <Input prefix={<UserOutlined />} placeholder="用户名" size="large" />
           </Form.Item>
@@ -58,12 +58,7 @@ export default function LoginPage() {
             </Button>
           </Form.Item>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', lineHeight: 1.8 }}>
-            默认账户：<br />
-            admin / admin123（管理员）<br />
-            inspector / inspector123（点检员）<br />
-            repairman / repairman123（维修工）<br />
-            supervisor / supervisor123（设备主管）<br />
-            viewer / viewer123（查看者）
+            请使用管理员分配的账户登录。演示环境账户见项目运行说明。
           </Text>
         </Form>
       </Card>

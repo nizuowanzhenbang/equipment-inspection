@@ -169,15 +169,15 @@ export default function MobileScan() {
           <Title level={4} style={{ marginTop: 0 }}>📱 移动端登录</Title>
           <Form form={loginForm} layout="vertical">
             <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
-              <Input placeholder="inspector" autoComplete="username" />
+              <Input placeholder="用户名" autoComplete="username" />
             </Form.Item>
             <Form.Item name="password" label="密码" rules={[{ required: true }]}>
-              <Input.Password placeholder="inspector123" autoComplete="current-password" />
+              <Input.Password placeholder="密码" autoComplete="current-password" />
             </Form.Item>
             <Button type="primary" block loading={loggingIn} onClick={doLogin} size="large">登录</Button>
           </Form>
           <Paragraph type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
-            提示：点检员请用 inspector / inspector123 登录。建议加到主屏幕（Safari -&gt; 分享 -&gt; 添加到主屏幕；Chrome -&gt; 三点菜单 -&gt; 安装应用）。
+            请使用管理员分配的点检账户登录。建议加到主屏幕（Safari -&gt; 分享 -&gt; 添加到主屏幕；Chrome -&gt; 三点菜单 -&gt; 安装应用）。
           </Paragraph>
         </Card>
       </div>
