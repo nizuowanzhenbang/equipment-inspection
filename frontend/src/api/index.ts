@@ -18,7 +18,7 @@ const api = axios.create({ baseURL: '/api', timeout: 15000 })
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  if (token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
@@ -285,8 +285,8 @@ export const purchaseRequestApi = {
   approve: (id: number, notes?: string) => api.post<unknown, ApiResponse<null>>(`/purchase-requests/${id}/approve`, { notes }),
   reject: (id: number, reason: string) => api.post<unknown, ApiResponse<null>>(`/purchase-requests/${id}/reject`, { reason }),
   send: (id: number) => api.post<unknown, ApiResponse<{ external_order_no?: string }>>(`/purchase-requests/${id}/send`),
-  receive: (id: number, received_qty: number) =>
-    api.post<unknown, ApiResponse<{ stock_qty: number; status: string }>>(`/purchase-requests/${id}/receive`, { received_qty }),
+  receive: (id: number, received_qty: number, request_id: string, token: string) =>
+    api.post<unknown, ApiResponse<{ stock_qty: number; status: string }>>(`/purchase-requests/${id}/receive`, { received_qty, request_id }, { headers: { Authorization: `Bearer ${token}` } }),
   cancel: (id: number) => api.post<unknown, ApiResponse<null>>(`/purchase-requests/${id}/cancel`),
 }
 

@@ -22,7 +22,7 @@ from app.models.defect import Defect
 from app.models.ticket import WorkTicket, OperationTicket, OperationTemplate
 from app.models.spare_part import SparePart, StockMovement
 from app.models.audit import AuditLog
-from app.models.purchase_request import PurchaseRequest
+from app.models.purchase_request import PurchaseRequest, PurchaseReceipt
 
 from app.api import (
     auth, equipments, routes_api, tasks, defects, dashboard,
@@ -37,7 +37,7 @@ from app.realtime import manager as ws_manager, ws_endpoint
 
 _ = (User, Equipment, InspectionRoute, InspectionPoint, InspectionTask, InspectionRecord,
      Defect, WorkTicket, OperationTicket, OperationTemplate, SparePart, StockMovement, AuditLog,
-     PurchaseRequest)
+     PurchaseRequest, PurchaseReceipt)
 
 
 def _create_default_users(db) -> None:

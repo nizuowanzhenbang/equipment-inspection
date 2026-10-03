@@ -94,11 +94,13 @@ def describe_schema(connection):
     return result
 
 
-def validate_structure(connection, *, allow_legacy=False):
+def validate_structure(connection, *, allow_legacy=False, require_receipts=True):
     dialect = connection.dialect.name
     if dialect not in ('sqlite', 'postgresql'):
         raise RuntimeError('Supported databases are SQLite and PostgreSQL')
     expected = json.loads((CONTRACTS / f'{dialect}.json').read_text(encoding='utf-8'))
+    if require_receipts:
+        expected.update(json.loads((CONTRACTS / f'{dialect}-receipts.json').read_text(encoding='utf-8')))
     actual = describe_schema(connection)
     if allow_legacy and not actual:
         return 'empty'

@@ -8,6 +8,8 @@
 
 同一备件的出入库和采购收货共用事务写锁，等锁后刷新库存及采购状态，避免并发领料漏扣库存、入库丢失更新或完成采购单重复收货。新增 SQLite 与真实 PostgreSQL 回归验证库存、流水和失败回滚。[复现、验证与面试讲解](docs/STOCK-CONSISTENCY.md)。
 
+采购分批收货支持稳定 UUID，响应丢失后刷新仍可确认原请求，库存只增加一次。正式升级新增 `0003_purchase_receipts`，旧客户端无标识仍按每次累计。[重试与恢复说明](docs/PURCHASE-RECEIPT-REPLAY.md)。
+
 ## 持续迭代：数据库版本与隔离恢复
 
 新增冻结的 Alembic 基线及升级前结构检查；正式启动只检查版本，演示、种子数据使用同一升级入口。备份通过 SQLite backup API 或 PostgreSQL 快照导出，恢复必须使用独立空库，并核对散列、表行数与外键。[迁移矩阵](docs/DATABASE-MIGRATIONS.md) · [备份恢复](docs/BACKUP-RESTORE.md)。

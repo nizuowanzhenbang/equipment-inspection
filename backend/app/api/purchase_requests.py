@@ -5,6 +5,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
@@ -12,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db, get_current_user, require_write, require_supervisor
-from app.models.purchase_request import PurchaseRequest, PRStatus, PRSource
+from app.models.purchase_request import PurchaseRequest, PurchaseReceipt, PRStatus, PRSource
 from app.models.spare_part import SparePart, StockMovement, StockMovementType
 from app.models.user import User
 from app.schemas.spare_part import InventoryDecimal, MAX_STOCK_QUANTITY
@@ -41,6 +42,7 @@ class PRReject(BaseModel):
 
 class PRReceive(BaseModel):
     received_qty: InventoryDecimal
+    request_id: Optional[UUID] = None
 
 
 class PRResponse(BaseModel):
@@ -251,6 +253,19 @@ def receive_pr(pid: int, payload: PRReceive, db: Session = Depends(get_db), curr
     pr = db.query(PurchaseRequest).filter(PurchaseRequest.id == pid).populate_existing().first()
     if not pr:
         raise HTTPException(404, "采购申请不存在")
+    request_id = str(payload.request_id) if payload.request_id is not None else None
+    if request_id is not None:
+        recorded = db.query(PurchaseReceipt).filter(
+            PurchaseReceipt.purchase_request_id == pid,
+            PurchaseReceipt.request_id == request_id,
+        ).first()
+        if recorded:
+            if recorded.actor_id != current.id or recorded.qty != payload.received_qty:
+                raise HTTPException(409, "该收货请求标识已用于其他数量或操作人")
+            return api_response(message="入库已登记", data={
+                "stock_qty": float(recorded.stock_qty_after),
+                "status": recorded.status_after,
+            })
     if pr.status not in (PRStatus.SENT, PRStatus.APPROVED):
         raise HTTPException(400, f"状态 {pr.status.value} 不可收货入库")
     if payload.received_qty <= 0:
@@ -273,11 +288,18 @@ def receive_pr(pid: int, payload: PRReceive, db: Session = Depends(get_db), curr
     if pr.received_qty >= (pr.qty or Decimal("0")):
         pr.status = PRStatus.RECEIVED
     db.add(mv)
+    if request_id is not None:
+        db.flush()
+        db.add(PurchaseReceipt(
+            purchase_request_id=pid, request_id=request_id, actor_id=current.id,
+            qty=quantity, movement_id=mv.id, stock_qty_after=new_stock,
+            status_after=pr.status.value,
+        ))
+    # Build from the locked transaction snapshot before commit expires ORM state.
+    # Another receipt may commit before this HTTP response is serialized.
+    result = {"stock_qty": float(new_stock), "status": pr.status.value}
     db.commit()
-    return api_response(message="入库已登记", data={
-        "stock_qty": float(sp.stock_qty),
-        "status": pr.status.value,
-    })
+    return api_response(message="入库已登记", data=result)
 
 
 @router.post("/{pid}/cancel")

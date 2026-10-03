@@ -6,6 +6,83 @@ from app.main import app  # register the current ORM, independently of frozen mi
 
 
 class MigrationChecks:
+    def previous_receipt_database(self, engine):
+        from alembic import command
+        from alembic.config import Config
+        from app.migrate import ROOT
+        config = Config(str(ROOT / 'alembic.ini'))
+        with engine.connect() as conn:
+            if engine.dialect.name == 'sqlite':
+                conn.exec_driver_sql('BEGIN IMMEDIATE')
+            else:
+                conn.begin()
+            config.attributes.update(connection=conn, preflight_passed=True)
+            command.upgrade(config, '0002_legacy_additions')
+            conn.execute(text("INSERT INTO users (username, hashed_password, role, is_active) "
+                              "VALUES ('previous', 'preserved', 'ADMIN', true)"))
+            conn.commit()
+
+    def test_previous_version_receipt_upgrade_preserves_rows_and_repeats(self, migration_engine):
+        from app.migrate import upgrade_database, check_database
+        engine = migration_engine
+        self.previous_receipt_database(engine)
+        upgrade_database(engine)
+        assert 'purchase_receipts' in inspect(engine).get_table_names()
+        assert check_database(engine) == '0003_purchase_receipts'
+        upgrade_database(engine)
+        with engine.connect() as conn:
+            assert conn.scalar(text('SELECT hashed_password FROM users')) == 'preserved'
+            assert conn.scalar(text('SELECT count(*) FROM purchase_receipts')) == 0
+
+    def test_receipt_migration_failure_keeps_previous_version_and_business_data(self, migration_engine):
+        from app.migrate import upgrade_database
+        from sqlalchemy import event
+        from sqlalchemy.exc import DBAPIError
+        engine = migration_engine
+        self.previous_receipt_database(engine)
+
+        def fail_after_table(conn, cursor, statement, parameters, context, executemany):
+            if statement.lstrip().startswith('CREATE TABLE purchase_receipts'):
+                conn.exec_driver_sql('SELECT * FROM intentional_missing_receipt_migration')
+
+        event.listen(engine, 'after_cursor_execute', fail_after_table)
+        try:
+            with pytest.raises(DBAPIError):
+                upgrade_database(engine)
+        finally:
+            event.remove(engine, 'after_cursor_execute', fail_after_table)
+        assert 'purchase_receipts' not in inspect(engine).get_table_names()
+        with engine.connect() as conn:
+            assert conn.scalar(text('SELECT version_num FROM alembic_version')) == '0002_legacy_additions'
+            assert conn.scalar(text('SELECT hashed_password FROM users')) == 'preserved'
+        upgrade_database(engine)
+        assert 'purchase_receipts' in inspect(engine).get_table_names()
+
+    def test_previous_version_drift_is_refused_before_new_receipt_table(self, migration_engine):
+        from app.migrate import upgrade_database
+        engine = migration_engine
+        self.previous_receipt_database(engine)
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE work_tickets DROP COLUMN signatures'))
+        with pytest.raises(RuntimeError, match='structure'):
+            upgrade_database(engine)
+        assert 'purchase_receipts' not in inspect(engine).get_table_names()
+        with engine.connect() as conn:
+            assert conn.scalar(text('SELECT version_num FROM alembic_version')) == '0002_legacy_additions'
+
+    def test_current_version_missing_receipts_is_not_silently_recreated(self, migration_engine):
+        from app.migrate import upgrade_database, check_database
+        engine = migration_engine
+        upgrade_database(engine)
+        with engine.begin() as conn:
+            conn.execute(text('DROP TABLE purchase_receipts'))
+        for operation in (check_database, upgrade_database):
+            with pytest.raises(RuntimeError, match='structure'):
+                operation(engine)
+        assert 'purchase_receipts' not in inspect(engine).get_table_names()
+        with engine.connect() as conn:
+            assert conn.scalar(text('SELECT version_num FROM alembic_version')) == '0003_purchase_receipts'
+
     def test_failed_ddl_rolls_back_known_additions_and_version(self, migration_engine):
         from app.migrate import upgrade_database
         from sqlalchemy import event
