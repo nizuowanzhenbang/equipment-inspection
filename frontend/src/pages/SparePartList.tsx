@@ -30,6 +30,7 @@ export default function SparePartList() {
 
   const [mvOpen, setMvOpen] = useState(false)
   const [mvForm] = Form.useForm()
+  const movementType = Form.useWatch('movement_type', mvForm)
   const [current, setCurrent] = useState<SparePart | null>(null)
   const [openDefects, setOpenDefects] = useState<Defect[]>([])
   const [workTickets, setWorkTickets] = useState<WorkTicket[]>([])
@@ -170,9 +171,9 @@ export default function SparePartList() {
             </Form.Item>
           </Space>
           <Space>
-            <Form.Item name="stock_qty" label="初始库存"><InputNumber min={0} step={0.5} /></Form.Item>
-            <Form.Item name="min_qty" label="安全库存"><InputNumber min={0} step={0.5} /></Form.Item>
-            <Form.Item name="unit_price" label="单价 (¥)"><InputNumber min={0} step={0.01} /></Form.Item>
+            <Form.Item name="stock_qty" label="初始库存"><InputNumber min={0} max={99999999.99} precision={2} step={0.5} /></Form.Item>
+            <Form.Item name="min_qty" label="安全库存"><InputNumber min={0} max={99999999.99} precision={2} step={0.5} /></Form.Item>
+            <Form.Item name="unit_price" label="单价 (¥)"><InputNumber min={0} max={99999999.99} precision={2} step={0.01} /></Form.Item>
           </Space>
           <Space>
             <Form.Item name="location" label="存放位置" style={{ width: 220 }}><Input placeholder="如：备件库 A-12" /></Form.Item>
@@ -188,8 +189,11 @@ export default function SparePartList() {
           <Form.Item name="movement_type" label="类型" rules={[{ required: true }]}>
             <Select options={Object.entries(MV_TYPE_LABEL).map(([k, v]) => ({ label: v, value: k }))} />
           </Form.Item>
-          <Form.Item name="qty" label="数量" rules={[{ required: true }]}>
-            <InputNumber min={0.01} step={0.5} style={{ width: '100%' }} />
+          <Form.Item name="qty" label="数量"
+            extra={movementType === 'ADJUST' ? '填写盘点后的实际库存，可为 0。' : undefined}
+            rules={[{ required: true, type: 'number', min: movementType === 'ADJUST' ? 0 : 0.01 }]}>
+            <InputNumber min={movementType === 'ADJUST' ? 0 : 0.01} max={99999999.99}
+              precision={2} step={0.5} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="defect_id" label="关联缺陷（领用场景）">
             <Select allowClear showSearch optionFilterProp="label"

@@ -34,6 +34,10 @@ def _validate_pg_url(url):
     parsed = make_url(url)
     if not all((parsed.host, parsed.port, parsed.username, parsed.database)):
         raise ValueError('PostgreSQL URL must explicitly include host, port, user and database')
+    # pg_restore --dbname expands conninfo/URIs, whereas SQLAlchemy treats the
+    # database component literally. Reject ambiguous names before either connects.
+    if '=' in parsed.database or parsed.database.startswith(('postgresql://', 'postgres://')):
+        raise ValueError('Use a literal database name; PostgreSQL conninfo and URI names are not supported')
     if any(key.startswith('PG') and key not in {'PG_DUMP', 'PG_RESTORE'} for key in os.environ):
         raise ValueError('Use explicit PostgreSQL URL settings; inherited PG connection defaults are not supported')
     allowed = {'sslmode', 'sslcert', 'sslkey', 'sslrootcert', 'connect_timeout'}

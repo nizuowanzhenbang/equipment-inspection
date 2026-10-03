@@ -18,6 +18,8 @@ PostgreSQL 需要与服务器兼容的 `pg_dump`/`pg_restore`（测试使用 Pos
 
 PostgreSQL URL 必须显式填写 host、port、user、database。除 `PG_DUMP` / `PG_RESTORE` 工具路径外，连接进程不得继承其他 `PG*` 环境设置；工具会提前拒绝，避免 Python 的预检连接和命令行恢复连接使用不同的环境默认值。SSL 配置只通过 URL 中受支持的 sslmode/sslcert/sslkey/sslrootcert 提供。
 
+库名还必须是无歧义的普通名称：备份和恢复均拒绝含 `=`，或以 `postgres://`、`postgresql://` 开头的数据库名。SQLAlchemy 会把 URL 的 database 当作字面库名，但 `pg_restore --dbname` 会把这些形式再次解释为连接参数或 URI；提前拒绝可以保证预检和实际恢复使用同一目标。2026-10-03 的真实 PostgreSQL 回归先复现了已有另一数据库被写入，再验证拒绝后该库原有表和数据完全不变、字面目标库仍为空。
+
 PostgreSQL 恢复必须显式指向事先新建的独立空库，建议 `CREATE DATABASE <唯一恢复库名> TEMPLATE template0`。工具拒绝源库、已有表/序列/视图、用户类型、函数、非默认 schema 或扩展的目标；只允许默认 public schema 与 plpgsql。请在维护窗口独占该目标库，禁止应用或其他管理员同时写入/执行 DDL。恢复采用 `--single-transaction --exit-on-error --no-owner --no-privileges`，归档内 SQL 失败时整个恢复事务回滚。完成后重新核对表行数和已验证外键。若恢复提交后清单行数不符，工具失败退出但保留独立目标供检查；不会自动删除数据库或回滚已提交的恢复。切勿让应用连接一个检查失败的目标。
 
 工具成功退出仅代表数据库检查通过。将应用配置指向恢复库前，在隔离环境执行 `python -m app.migrate check`，必要时按迁移文档先升级，然后验证登录、点检记录、缺陷派工、修复、验收以及数据数量。记录备份清单、验收结果和切换时间后再安排业务切换。回滚代码不能替代恢复旧版数据库备份。

@@ -86,3 +86,42 @@ def test_postgresql_manifest_uses_dump_snapshot(backup_databases, tmp_path, monk
             assert conn.execute(text('SELECT count(*) FROM event')).scalar_one() == 2
     finally:
         engine.dispose()
+
+
+def test_postgresql_conninfo_database_name_cannot_redirect_restore(backup_databases, tmp_path):
+    from app import backup
+    source, target = backup_databases
+    # SQLAlchemy treats this as a literal name, while pg_restore --dbname expands
+    # it as conninfo and would otherwise restore into the already populated target.
+    alias_name = 'dbname=' + make_url(target).database
+    alias = make_url(target).set(database=alias_name).render_as_string(hide_password=False)
+    admin = create_engine(source, isolation_level='AUTOCOMMIT')
+    engines = [create_engine(url) for url in (source, target, alias)]
+    created = False
+    try:
+        with admin.connect() as conn:
+            conn.execute(text(f'CREATE DATABASE "{alias_name}" TEMPLATE template0'))
+            created = True
+        with engines[0].begin() as conn:
+            conn.execute(text('CREATE TABLE restored_marker(id INTEGER PRIMARY KEY)'))
+            conn.execute(text('INSERT INTO restored_marker VALUES(9)'))
+        with engines[1].begin() as conn:
+            conn.execute(text('CREATE TABLE existing_business(id INTEGER PRIMARY KEY)'))
+            conn.execute(text('INSERT INTO existing_business VALUES(5)'))
+        archive = tmp_path / 'routing.dump'
+        backup.backup_database(source, archive)
+        with pytest.raises(ValueError) as failure:
+            backup.restore_database(archive, alias)
+        with engines[1].connect() as conn:
+            assert conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")).scalars().all() == ['existing_business']
+            assert conn.execute(text('SELECT id FROM existing_business')).scalars().all() == [5]
+        with engines[2].connect() as conn:
+            assert conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'")).all() == []
+        assert 'literal database name' in str(failure.value)
+    finally:
+        for engine in engines:
+            engine.dispose()
+        if created:
+            with admin.connect() as conn:
+                conn.execute(text(f'DROP DATABASE "{alias_name}" WITH (FORCE)'))
+        admin.dispose()

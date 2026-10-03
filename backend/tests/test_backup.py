@@ -4,6 +4,7 @@ import json
 import sqlite3
 
 import pytest
+from sqlalchemy.engine import URL
 
 
 def api():
@@ -42,6 +43,21 @@ def test_pg_inherited_routing_is_refused_for_restore(tmp_path, monkeypatch):
     monkeypatch.setenv('PGHOSTADDR', '192.0.2.1')
     with pytest.raises(ValueError):
         module.restore_database(tmp_path / 'not-opened.dump', 'postgresql://user:password@localhost:5432/target')
+
+
+@pytest.mark.parametrize('database', ['dbname=other_database', 'postgresql://localhost/other_database', 'postgres://localhost/other_database'])
+@pytest.mark.parametrize('operation', ['backup', 'restore'])
+def test_pg_connection_string_database_names_are_refused_before_io(tmp_path, database, operation):
+    module = api()
+    url = URL.create('postgresql', username='user', password='password', host='127.0.0.1', port=1,
+                     database=database).render_as_string(hide_password=False)
+    archive = tmp_path / 'not-opened.dump'
+    with pytest.raises(ValueError, match='literal database name'):
+        if operation == 'backup':
+            module.backup_database(url, archive)
+        else:
+            module.restore_database(archive, url)
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_sqlite_roundtrip(tmp_path):

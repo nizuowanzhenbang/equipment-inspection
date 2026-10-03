@@ -15,6 +15,7 @@ from app.api.deps import get_db, get_current_user, require_write, require_superv
 from app.models.purchase_request import PurchaseRequest, PRStatus, PRSource
 from app.models.spare_part import SparePart, StockMovement, StockMovementType
 from app.models.user import User
+from app.schemas.spare_part import InventoryDecimal, MAX_STOCK_QUANTITY
 from app.utils.helpers import api_response, paginate_response, generate_pr_no
 from app.utils.audit import log as audit_log
 from app.utils.transactions import lock_spare_part
@@ -39,7 +40,7 @@ class PRReject(BaseModel):
 
 
 class PRReceive(BaseModel):
-    received_qty: float
+    received_qty: InventoryDecimal
 
 
 class PRResponse(BaseModel):
@@ -254,7 +255,11 @@ def receive_pr(pid: int, payload: PRReceive, db: Session = Depends(get_db), curr
         raise HTTPException(400, f"状态 {pr.status.value} 不可收货入库")
     if payload.received_qty <= 0:
         raise HTTPException(400, "入库数量必须 > 0")
-    quantity = Decimal(str(payload.received_qty))
+    quantity = payload.received_qty
+    new_stock = (sp.stock_qty or Decimal("0")) + quantity
+    new_received = (pr.received_qty or Decimal("0")) + quantity
+    if new_stock > MAX_STOCK_QUANTITY or new_received > MAX_STOCK_QUANTITY:
+        raise HTTPException(400, "累计库存或收货数量超出上限")
     mv = StockMovement(
         spare_part_id=sp.id,
         movement_type=StockMovementType.IN,
@@ -262,9 +267,9 @@ def receive_pr(pid: int, payload: PRReceive, db: Session = Depends(get_db), curr
         operator=current.username,
         notes=f"采购单 {pr.pr_no} 到货入库",
     )
-    sp.stock_qty = (sp.stock_qty or Decimal("0")) + quantity
+    sp.stock_qty = new_stock
     pr.received_at = datetime.utcnow()
-    pr.received_qty = (pr.received_qty or Decimal("0")) + quantity
+    pr.received_qty = new_received
     if pr.received_qty >= (pr.qty or Decimal("0")):
         pr.status = PRStatus.RECEIVED
     db.add(mv)
