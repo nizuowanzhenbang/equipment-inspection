@@ -4,7 +4,7 @@
 """
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Enum, DateTime, Text, ForeignKey, Numeric
+from sqlalchemy import Column, Integer, String, Enum, DateTime, Text, ForeignKey, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -55,3 +55,22 @@ class PurchaseRequest(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     spare_part = relationship("SparePart")
+
+
+class PurchaseReceipt(Base):
+    """Committed keyed receipts retain their original response for safe retries."""
+    __tablename__ = "purchase_receipts"
+    __table_args__ = (
+        UniqueConstraint("purchase_request_id", "request_id", name="uq_purchase_receipt_request"),
+        UniqueConstraint("movement_id", name="uq_purchase_receipt_movement"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    purchase_request_id = Column(Integer, ForeignKey("purchase_requests.id"), nullable=False)
+    request_id = Column(String(36), nullable=False)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    qty = Column(Numeric(10, 2), nullable=False)
+    movement_id = Column(Integer, ForeignKey("stock_movements.id"), nullable=False)
+    stock_qty_after = Column(Numeric(10, 2), nullable=False)
+    status_after = Column(String(20), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

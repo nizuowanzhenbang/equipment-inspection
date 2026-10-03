@@ -10,7 +10,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.schema_contract import validate_structure
 
-HEAD = '0002_legacy_additions'
+HEAD = '0003_purchase_receipts'
+PREVIOUS = '0002_legacy_additions'
 BASELINE = '0001_frozen_baseline'
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,7 +31,7 @@ def _revision(connection):
             or inspector.get_check_constraints('alembic_version')):
         raise RuntimeError('Unknown version table structure')
     rows = connection.execute(text('SELECT version_num FROM alembic_version')).scalars().all()
-    if len(rows) != 1 or rows[0] not in (HEAD, BASELINE):
+    if len(rows) != 1 or rows[0] not in (HEAD, PREVIOUS, BASELINE):
         raise RuntimeError('Unknown or incomplete database version; no changes made')
     return rows[0]
 
@@ -65,7 +66,10 @@ def upgrade_database(engine):
             else:
                 raise RuntimeError('Supported databases are SQLite and PostgreSQL')
             revision = _revision(connection)
-            validate_structure(connection, allow_legacy=revision != HEAD)
+            require_receipts = revision == HEAD or (
+                revision is None and 'purchase_receipts' in inspect(connection).get_table_names())
+            validate_structure(connection, allow_legacy=revision in (None, BASELINE),
+                               require_receipts=require_receipts)
             if 'inspection_records' in inspect(connection).get_table_names():
                 duplicate = connection.execute(text(
                     'SELECT task_id, point_id FROM inspection_records GROUP BY task_id, point_id '

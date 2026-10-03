@@ -1,0 +1,127 @@
+{
+  "purchase_receipts": {
+    "checks": [],
+    "columns": {
+      "actor_id": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "INTEGER"
+      },
+      "created_at": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "TIMESTAMP"
+      },
+      "id": {
+        "default": "<serial>",
+        "enum": null,
+        "nullable": false,
+        "type": "INTEGER"
+      },
+      "movement_id": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "INTEGER"
+      },
+      "purchase_request_id": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "INTEGER"
+      },
+      "qty": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "NUMERIC(10, 2)"
+      },
+      "request_id": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "VARCHAR(36)"
+      },
+      "status_after": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "VARCHAR(20)"
+      },
+      "stock_qty_after": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "NUMERIC(10, 2)"
+      }
+    },
+    "foreign_keys": [
+      {
+        "columns": [
+          "actor_id"
+        ],
+        "options": {},
+        "schema": null,
+        "table": "users",
+        "target": [
+          "id"
+        ]
+      },
+      {
+        "columns": [
+          "movement_id"
+        ],
+        "options": {},
+        "schema": null,
+        "table": "stock_movements",
+        "target": [
+          "id"
+        ]
+      },
+      {
+        "columns": [
+          "purchase_request_id"
+        ],
+        "options": {},
+        "schema": null,
+        "table": "purchase_requests",
+        "target": [
+          "id"
+        ]
+      }
+    ],
+    "indexes": {
+      "uq_purchase_receipt_movement": {
+        "columns": [
+          "movement_id"
+        ],
+        "expressions": null,
+        "unique": true,
+        "where": ""
+      },
+      "uq_purchase_receipt_request": {
+        "columns": [
+          "purchase_request_id",
+          "request_id"
+        ],
+        "expressions": null,
+        "unique": true,
+        "where": ""
+      }
+    },
+    "pk": [
+      "id"
+    ],
+    "unique": [
+      [
+        "movement_id"
+      ],
+      [
+        "purchase_request_id",
+        "request_id"
+      ]
+    ]
+  }
+}

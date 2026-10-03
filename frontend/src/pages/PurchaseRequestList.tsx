@@ -5,18 +5,22 @@
  * - 自动生成：扫描低库存备件批量建草稿（手动按钮 + 调度器）
  * - 推送：APPROVED → POST 至 fuel-procurement 的 /api/integration/material-requests
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  Card, Table, Tag, Button, Space, Select, Modal, Form, Input, InputNumber, message, Drawer, Descriptions,
+  Alert, Card, Table, Tag, Button, Space, Select, Modal, Form, Input, InputNumber, message, Drawer, Descriptions,
 } from 'antd'
 import { ShoppingCartOutlined, PlusOutlined, ReloadOutlined, SendOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { purchaseRequestApi, sparePartApi, PR_STATUS_LABEL } from '../api'
 import type { PurchaseRequest, PRStatus } from '../api'
 import type { SparePart } from '../types'
+import { loadReceiptAttempt, getReceiptAttempt, clearReceiptAttempt, discardReceiptAttempt, receiptAttemptRaw, receiptAccountToken } from '../utils/receiptAttempt'
+import type { ReceiptAttempt } from '../utils/receiptAttempt'
 import { useAuthStore, canSupervise, canWrite } from '../stores/auth'
 
 export default function PurchaseRequestList() {
+  const username = useAuthStore((s) => s.username)
+  const token = useAuthStore((s) => s.token)
   const role = useAuthStore((s) => s.role)
   const writable = canWrite(role)
   const supervisor = canSupervise(role)
@@ -37,6 +41,44 @@ export default function PurchaseRequestList() {
   const [rejectForm] = Form.useForm()
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [receiveForm] = Form.useForm()
+  const [pendingReceipt, setPendingReceipt] = useState<ReceiptAttempt | null>(null)
+  const [receiptStorageError, setReceiptStorageError] = useState(false)
+  const [receiving, setReceiving] = useState(false)
+  const receiveInFlight = useRef(false)
+  const recoverReceipt = (id: number) => {
+    try {
+      const pending = loadReceiptAttempt(localStorage, username!, id)
+      setPendingReceipt(pending); setReceiptStorageError(false)
+      return pending
+    } catch {
+      setPendingReceipt(null); setReceiptStorageError(true)
+      message.error('无法读取待确认收货记录，请先核对采购单和库存流水')
+      return null
+    }
+  }
+  const openReceive = () => {
+    const pending = recoverReceipt(detail!.id)
+    receiveForm.resetFields()
+    if (pending) receiveForm.setFieldsValue({ received_qty: pending.quantity })
+    setReceiveOpen(true)
+  }
+  const abandonReceipt = () => {
+    let reviewedRaw: string | null
+    try { reviewedRaw = receiptAttemptRaw(localStorage, username!, detail!.id) }
+    catch { message.error('无法读取待确认记录，请检查浏览器存储'); return }
+    Modal.confirm({
+    title: '放弃待确认收货？',
+    content: '请先核对采购单已到货数量和库存流水。原请求可能已入库，放弃后再次登记会作为新的一批到货。',
+    okText: '已核对，放弃待确认记录',
+    onOk: () => {
+      try {
+        discardReceiptAttempt(localStorage, username!, detail!.id, reviewedRaw)
+        setPendingReceipt(null); setReceiptStorageError(false)
+        setReceiveOpen(false); receiveForm.resetFields()
+      } catch (e: any) { message.error(e?.message || '无法清除待确认记录，请检查浏览器存储') }
+    },
+    })
+  }
 
   const load = () => {
     setLoading(true)
@@ -53,6 +95,7 @@ export default function PurchaseRequestList() {
   const reloadDetail = async (id: number) => {
     const r = await purchaseRequestApi.get(id)
     setDetail(r.data)
+    recoverReceipt(id)
   }
 
   const openDetail = async (id: number) => {
@@ -98,9 +141,29 @@ export default function PurchaseRequestList() {
   }
 
   const onReceive = async () => {
-    const v = await receiveForm.validateFields()
-    await transition(() => purchaseRequestApi.receive(detail!.id, v.received_qty), '入库已登记')
-    setReceiveOpen(false); receiveForm.resetFields()
+    if (receiveInFlight.current || receiptStorageError || !detail || !username) return
+    receiveInFlight.current = true; setReceiving(true)
+    const id = detail.id
+    try {
+      const v = await receiveForm.validateFields()
+      const requestToken = receiptAccountToken(localStorage, username, token)
+      const attempt = getReceiptAttempt(localStorage, username, id, v.received_qty, pendingReceipt)
+      setPendingReceipt(attempt)
+      receiveForm.setFieldsValue({ received_qty: attempt.quantity })
+      await purchaseRequestApi.receive(id, attempt.quantity, attempt.requestId, requestToken)
+      clearReceiptAttempt(localStorage, username, id, attempt.requestId)
+      setPendingReceipt(null); setReceiveOpen(false); receiveForm.resetFields()
+      message.success('入库已登记')
+      // The receipt response is its original snapshot; fetch current order state separately.
+      reloadDetail(id).catch(() => message.warning('收货已确认，采购单刷新失败，请重新打开详情'))
+      load()
+    } catch (e: any) {
+      if (!pendingReceipt && !e?.errorFields) {
+        const pending = recoverReceipt(id)
+        if (pending) receiveForm.setFieldsValue({ received_qty: pending.quantity })
+      }
+      if (!e?.errorFields) message.error(e?.detail || e?.message || '收货结果未确认，请使用原请求重试')
+    } finally { receiveInFlight.current = false; setReceiving(false) }
   }
 
   const statusTag = (s: PRStatus) => {
@@ -222,8 +285,8 @@ export default function PurchaseRequestList() {
                     推送 fuel-procurement
                   </Button>
                 )}
-                {writable && (detail.status === 'SENT' || detail.status === 'APPROVED') && (
-                  <Button onClick={() => setReceiveOpen(true)}>到货入库</Button>
+                {writable && (detail.status === 'SENT' || detail.status === 'APPROVED' || pendingReceipt || receiptStorageError) && (
+                  <Button onClick={openReceive}>{pendingReceipt || receiptStorageError ? '确认上次收货' : '到货入库'}</Button>
                 )}
                 {supervisor && !['RECEIVED', 'CANCELLED'].includes(detail.status) && (
                   <Button onClick={() => transition(() => purchaseRequestApi.cancel(detail.id), '已取消')}>取消</Button>
@@ -242,10 +305,20 @@ export default function PurchaseRequestList() {
         </Form>
       </Modal>
 
-      <Modal title="到货入库" open={receiveOpen} onOk={onReceive} onCancel={() => setReceiveOpen(false)}>
+      <Modal title="到货入库" open={receiveOpen} onOk={onReceive}
+        confirmLoading={receiving} okText={pendingReceipt ? '确认上次收货' : 'OK'}
+        okButtonProps={{ disabled: receiptStorageError }} cancelButtonProps={{ disabled: receiving }}
+        closable={!receiving} maskClosable={!receiving}
+        onCancel={() => { if (!receiveInFlight.current) setReceiveOpen(false) }}>
+        {(pendingReceipt || receiptStorageError) && <>
+          <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+            message={receiptStorageError ? '待确认记录无法读取，已停止发送' : '上次收货结果待确认'}
+            description="原请求可能已入库。确认会复用原标识和数量；关闭或刷新页面会保留记录。" />
+          <Button danger disabled={receiving} onClick={abandonReceipt} style={{ marginBottom: 12 }}>核对流水后放弃待确认记录</Button>
+        </>}
         <Form form={receiveForm} layout="vertical">
           <Form.Item name="received_qty" label="本次入库数量" rules={[{ required: true, type: 'number', min: 0.01 }]}>
-            <InputNumber style={{ width: '100%' }} min={0.01} max={99999999.99} precision={2} />
+            <InputNumber style={{ width: '100%' }} min={0.01} max={99999999.99} precision={2} disabled={!!pendingReceipt || receiving || receiptStorageError} />
           </Form.Item>
         </Form>
       </Modal>
