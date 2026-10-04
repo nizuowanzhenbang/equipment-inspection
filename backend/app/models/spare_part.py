@@ -1,8 +1,8 @@
 """备品备件 + 出入库流水模型"""
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Enum, DateTime, Text, ForeignKey, Numeric
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Enum, DateTime, Text, ForeignKey, Numeric, func, select
+from sqlalchemy.orm import relationship, column_property
 from app.database import Base
 
 
@@ -52,3 +52,13 @@ class StockMovement(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     spare_part = relationship("SparePart", back_populates="movements")
+
+
+# Read the quantity and its ledger revision in the same SQL snapshot. This is a
+# mapped expression, not a persisted column; all existing migrations stay valid.
+SparePart.stock_revision = column_property(
+    select(func.coalesce(func.max(StockMovement.id), 0))
+    .where(StockMovement.spare_part_id == SparePart.id)
+    .correlate_except(StockMovement)
+    .scalar_subquery()
+)

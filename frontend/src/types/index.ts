@@ -267,6 +267,7 @@ export interface SparePart {
   unit: string
   category?: string | null
   stock_qty: number
+  stock_revision: number
   min_qty: number
   unit_price: number
   location?: string | null

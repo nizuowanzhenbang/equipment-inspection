@@ -67,7 +67,7 @@ def test_invalid_receipt_preserves_purchase_and_stock(stock_context, value):
 def test_zero_stocktake_is_recorded_and_triggers_low_stock(stock_context):
     ctx = stock_context
     response = ctx.client.post(f'/api/spare-parts/{ctx.part_id}/movements',
-                               json={'movement_type': 'ADJUST', 'qty': 0})
+                               json={'movement_type': 'ADJUST', 'qty': 0, 'expected_stock_revision': 0})
     assert response.status_code == 200, response.text
     assert response.json()['data']['stock_qty'] == 0
     assert response.json()['data']['low_stock'] is True
