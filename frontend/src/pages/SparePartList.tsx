@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Card, Table, Tag, Button, Space, Input, Modal, Form, InputNumber, message, Typography,
   Drawer, Statistic, Row, Col, Select, Switch,
@@ -29,6 +29,8 @@ export default function SparePartList() {
   const [createForm] = Form.useForm()
 
   const [mvOpen, setMvOpen] = useState(false)
+  const [movementSaving, setMovementSaving] = useState(false)
+  const movementPending = useRef(false)
   const [mvForm] = Form.useForm()
   const movementType = Form.useWatch('movement_type', mvForm)
   const [current, setCurrent] = useState<SparePart | null>(null)
@@ -67,14 +69,32 @@ export default function SparePartList() {
   }
 
   const onMovement = async () => {
-    const v = await mvForm.validateFields()
+    if (movementPending.current) return
+    movementPending.current = true
     try {
-      const r = await sparePartApi.createMovement(current!.id, v)
+      const v = await mvForm.validateFields()
+      setMovementSaving(true)
+      const payload = v.movement_type === 'ADJUST'
+        ? { ...v, expected_stock_revision: current!.stock_revision }
+        : v
+      const r = await sparePartApi.createMovement(current!.id, payload)
       message.success(`已登记，当前库存：${r.data.stock_qty}` + (r.data.low_stock ? ' ⚠️低于安全库存' : ''))
       setMvOpen(false); mvForm.resetFields()
       load()
       sparePartApi.overview().then((r) => setOverview(r.data))
-    } catch (e: any) { message.error(e?.detail || '失败') }
+    } catch (e: any) {
+      if (!e?.errorFields) message.error(e?.detail || '失败')
+    } finally {
+      movementPending.current = false
+      setMovementSaving(false)
+    }
+  }
+
+  const closeMovement = (refresh = false) => {
+    if (movementPending.current) return
+    setMvOpen(false)
+    mvForm.resetFields()
+    if (refresh) load()
   }
 
   const openHistory = async (p: SparePart) => {
@@ -146,7 +166,7 @@ export default function SparePartList() {
               render: (_: any, r: SparePart) => (
                 <Space size="small">
                   {repairer && (
-                    <Button size="small" icon={<SwapOutlined />} onClick={() => { setCurrent(r); setMvOpen(true) }}>出入库</Button>
+                    <Button size="small" icon={<SwapOutlined />} onClick={() => { mvForm.resetFields(); setCurrent(r); setMvOpen(true) }}>出入库</Button>
                   )}
                   <Button size="small" type="link" onClick={() => openHistory(r)}>流水</Button>
                 </Space>
@@ -184,11 +204,21 @@ export default function SparePartList() {
       </Modal>
 
       <Modal title={current ? `出入库登记 · ${current.code} ${current.name}` : '出入库'}
-        open={mvOpen} onOk={onMovement} onCancel={() => setMvOpen(false)} width={560}>
-        <Form form={mvForm} layout="vertical" initialValues={{ movement_type: 'OUT', qty: 1 }}>
+        open={mvOpen} onOk={onMovement} onCancel={() => closeMovement()} width={560}
+        confirmLoading={movementSaving} okButtonProps={{ disabled: movementSaving }}
+        cancelButtonProps={{ disabled: movementSaving }} closable={!movementSaving}
+        maskClosable={!movementSaving} keyboard={!movementSaving}>
+        <Form form={mvForm} layout="vertical" disabled={movementSaving} initialValues={{ movement_type: 'OUT', qty: 1 }}>
           <Form.Item name="movement_type" label="类型" rules={[{ required: true }]}>
-            <Select options={Object.entries(MV_TYPE_LABEL).map(([k, v]) => ({ label: v, value: k }))} />
+            <Select options={Object.entries(MV_TYPE_LABEL).map(([k, v]) => ({ label: v, value: k }))}
+              onChange={value => { if (value === 'ADJUST') mvForm.setFieldValue('qty', undefined) }} />
           </Form.Item>
+          {movementType === 'ADJUST' && current && (
+            <Space direction="vertical" style={{ marginBottom: 16 }}>
+              <Text>盘点基准库存：{Number(current.stock_qty).toFixed(2)} {current.unit}</Text>
+              <Button disabled={movementSaving} onClick={() => closeMovement(true)}>关闭并刷新库存</Button>
+            </Space>
+          )}
           <Form.Item name="qty" label="数量"
             extra={movementType === 'ADJUST' ? '填写盘点后的实际库存，可为 0。' : undefined}
             rules={[{ required: true, type: 'number', min: movementType === 'ADJUST' ? 0 : 0.01 }]}>

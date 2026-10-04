@@ -66,6 +66,7 @@ class SparePartResponse(BaseModel):
     unit: str
     category: Optional[str]
     stock_qty: Decimal
+    stock_revision: int
     min_qty: Decimal
     unit_price: Decimal
     location: Optional[str]
@@ -80,6 +81,7 @@ class SparePartResponse(BaseModel):
 class MovementCreate(BaseModel):
     movement_type: StockMovementType
     qty: InventoryDecimal
+    expected_stock_revision: Optional[Annotated[int, Field(strict=True, ge=0, le=2147483647)]] = None
     defect_id: Optional[int] = None
     work_ticket_id: Optional[int] = None
     notes: Optional[str] = None

@@ -109,6 +109,11 @@ def create_movement(
     p = lock_spare_part(db, pid)
     if not p:
         raise HTTPException(404, "物料不存在")
+    if payload.movement_type == StockMovementType.ADJUST:
+        if payload.expected_stock_revision is None:
+            raise HTTPException(409, "盘点信息不完整，请更新客户端并刷新库存后重新盘点")
+        if payload.expected_stock_revision != p.stock_revision:
+            raise HTTPException(409, "库存已有变动，请关闭并刷新库存，核对后重新盘点")
     if payload.qty == 0 and payload.movement_type != StockMovementType.ADJUST:
         raise HTTPException(400, "数量必须为正")
     if payload.defect_id and not db.query(Defect).filter(Defect.id == payload.defect_id).first():
@@ -138,13 +143,15 @@ def create_movement(
         notes=payload.notes,
     )
     db.add(m)
-    db.commit()
-    db.refresh(m)
-    return api_response(message="出入库已登记", data={
+    db.flush()
+    data = {
         "movement": _mv_to_dict(m),
         "stock_qty": float(p.stock_qty),
+        "stock_revision": m.id,
         "low_stock": float(p.stock_qty) < float(p.min_qty or 0),
-    })
+    }
+    db.commit()
+    return api_response(message="出入库已登记", data=data)
 
 
 @router.get("/{pid}/movements")

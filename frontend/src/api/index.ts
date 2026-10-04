@@ -297,8 +297,8 @@ export const sparePartApi = {
   get: (id: number) => api.get<unknown, ApiResponse<SparePart>>(`/spare-parts/${id}`),
   update: (id: number, data: Partial<SparePart>) => api.put<unknown, ApiResponse<SparePart>>(`/spare-parts/${id}`, data),
   categories: () => api.get<unknown, ApiResponse<Array<{ category: string; count: number }>>>(`/spare-parts/categories`),
-  createMovement: (id: number, data: { movement_type: StockMovementType; qty: number; defect_id?: number; work_ticket_id?: number; notes?: string }) =>
-    api.post<unknown, ApiResponse<{ movement: StockMovement; stock_qty: number; low_stock: boolean }>>(`/spare-parts/${id}/movements`, data),
+  createMovement: (id: number, data: { movement_type: StockMovementType; qty: number; expected_stock_revision?: number; defect_id?: number; work_ticket_id?: number; notes?: string }) =>
+    api.post<unknown, ApiResponse<{ movement: StockMovement; stock_qty: number; stock_revision: number; low_stock: boolean }>>(`/spare-parts/${id}/movements`, data),
   listMovements: (id: number, params?: { page?: number; page_size?: number }) =>
     api.get<unknown, ApiResponse<PaginatedResponse<StockMovement>>>(`/spare-parts/${id}/movements`, { params }),
   overview: () =>
