@@ -10,6 +10,8 @@
 
 采购分批收货支持稳定 UUID，响应丢失后刷新仍可确认原请求，库存只增加一次。正式升级新增 `0003_purchase_receipts`，旧客户端无标识仍按每次累计。[重试与恢复说明](docs/PURCHASE-RECEIPT-REPLAY.md)。
 
+采购提交、批准、驳回、推送、取消与收货共用锁并在等待后刷新状态，避免已取消单复活或已完成收货被旧请求取消；审批/推送状态与审计同事务。[状态竞争与推送边界](docs/PURCHASE-STATE-CONSISTENCY.md)。
+
 ## 持续迭代：数据库版本与隔离恢复
 
 新增冻结的 Alembic 基线及升级前结构检查；正式启动只检查版本，演示、种子数据使用同一升级入口。备份通过 SQLite backup API 或 PostgreSQL 快照导出，恢复必须使用独立空库，并核对散列、表行数与外键。[迁移矩阵](docs/DATABASE-MIGRATIONS.md) · [备份恢复](docs/BACKUP-RESTORE.md)。
