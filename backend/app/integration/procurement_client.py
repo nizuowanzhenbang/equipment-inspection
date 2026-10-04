@@ -43,6 +43,7 @@ def _build_payload(pr: PurchaseRequest) -> dict:
 def push_request(db: Session, pr: PurchaseRequest) -> dict:
     """推送已批准的采购申请到 fuel-procurement，更新本地状态/外部单号
 
+    调用方负责将状态与审计一起提交；本函数不提交事务。
     返回 {ok, external_order_no, message}
     """
     if pr.status != PRStatus.APPROVED:
@@ -53,7 +54,6 @@ def push_request(db: Session, pr: PurchaseRequest) -> dict:
         pr.status = PRStatus.SENT
         pr.sent_at = datetime.utcnow()
         pr.external_order_no = f"MOCK-{pr.pr_no}"
-        db.commit()
         return {"ok": True, "external_order_no": pr.external_order_no, "message": "无外部采购系统，已 mock 标记为 SENT"}
 
     url = settings.PROCUREMENT_SYSTEM_URL.rstrip("/") + "/api/integration/material-requests"
@@ -66,7 +66,6 @@ def push_request(db: Session, pr: PurchaseRequest) -> dict:
         pr.status = PRStatus.SENT
         pr.sent_at = datetime.utcnow()
         pr.external_order_no = ext
-        db.commit()
         return {"ok": True, "external_order_no": ext, "message": "已推送"}
     except Exception as exc:
         logger.warning("push_request 失败 pr=%s err=%s", pr.pr_no, exc)

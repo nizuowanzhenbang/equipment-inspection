@@ -176,11 +176,24 @@ def get_pr(pid: int, db: Session = Depends(get_db), _: User = Depends(get_curren
     return api_response(data=_to_dict(pr))
 
 
-@router.post("/{pid}/submit")
-def submit_pr(pid: int, db: Session = Depends(get_db), current: User = Depends(require_write)):
-    pr = db.query(PurchaseRequest).filter(PurchaseRequest.id == pid).first()
+def _lock_pr(db: Session, pid: int) -> PurchaseRequest:
+    """All existing order transitions share the inventory lock, then refresh state."""
+    pr = db.query(PurchaseRequest).options(joinedload(PurchaseRequest.spare_part)).filter(PurchaseRequest.id == pid).first()
     if not pr:
         raise HTTPException(404, "采购申请不存在")
+    if not lock_spare_part(db, pr.spare_part_id):
+        raise HTTPException(404, "对应备件已被删除")
+    # Waiting for the part lock may have made both the order and its relation stale.
+    pr = (db.query(PurchaseRequest).options(joinedload(PurchaseRequest.spare_part))
+          .filter(PurchaseRequest.id == pid).populate_existing().first())
+    if not pr:
+        raise HTTPException(404, "采购申请不存在")
+    return pr
+
+
+@router.post("/{pid}/submit")
+def submit_pr(pid: int, db: Session = Depends(get_db), current: User = Depends(require_write)):
+    pr = _lock_pr(db, pid)
     if pr.status != PRStatus.DRAFT:
         raise HTTPException(400, f"状态 {pr.status.value} 不可提交")
     pr.status = PRStatus.SUBMITTED
@@ -191,15 +204,12 @@ def submit_pr(pid: int, db: Session = Depends(get_db), current: User = Depends(r
 
 @router.post("/{pid}/approve")
 def approve_pr(pid: int, payload: PRApprove, db: Session = Depends(get_db), current: User = Depends(require_supervisor)):
-    pr = db.query(PurchaseRequest).options(joinedload(PurchaseRequest.spare_part)).filter(PurchaseRequest.id == pid).first()
-    if not pr:
-        raise HTTPException(404, "采购申请不存在")
+    pr = _lock_pr(db, pid)
     if pr.status != PRStatus.SUBMITTED:
         raise HTTPException(400, f"状态 {pr.status.value} 不可批准")
     pr.status = PRStatus.APPROVED
     pr.approver = current.username
     pr.approved_at = datetime.utcnow()
-    db.commit()
     audit_log(db, actor=current.username, action="pr.approve",
               target_type="PurchaseRequest", target_id=pr.id, target_no=pr.pr_no,
               summary=f"批准采购：{pr.spare_part.code if pr.spare_part else ''} × {pr.qty}")
@@ -209,9 +219,7 @@ def approve_pr(pid: int, payload: PRApprove, db: Session = Depends(get_db), curr
 
 @router.post("/{pid}/reject")
 def reject_pr(pid: int, payload: PRReject, db: Session = Depends(get_db), current: User = Depends(require_supervisor)):
-    pr = db.query(PurchaseRequest).filter(PurchaseRequest.id == pid).first()
-    if not pr:
-        raise HTTPException(404, "采购申请不存在")
+    pr = _lock_pr(db, pid)
     if pr.status != PRStatus.SUBMITTED:
         raise HTTPException(400, f"状态 {pr.status.value} 不可驳回")
     pr.status = PRStatus.REJECTED
@@ -224,9 +232,7 @@ def reject_pr(pid: int, payload: PRReject, db: Session = Depends(get_db), curren
 @router.post("/{pid}/send")
 def send_pr(pid: int, db: Session = Depends(get_db), current: User = Depends(require_supervisor)):
     """推送 fuel-procurement"""
-    pr = db.query(PurchaseRequest).options(joinedload(PurchaseRequest.spare_part)).filter(PurchaseRequest.id == pid).first()
-    if not pr:
-        raise HTTPException(404, "采购申请不存在")
+    pr = _lock_pr(db, pid)
     if pr.status != PRStatus.APPROVED:
         raise HTTPException(400, f"状态 {pr.status.value} 不可推送")
     result = push_request(db, pr)
@@ -242,17 +248,8 @@ def send_pr(pid: int, db: Session = Depends(get_db), current: User = Depends(req
 @router.post("/{pid}/receive")
 def receive_pr(pid: int, payload: PRReceive, db: Session = Depends(get_db), current: User = Depends(require_write)):
     """到货入库：自动写一条 StockMovement(IN) 并更新备件库存"""
-    pr = db.query(PurchaseRequest).options(joinedload(PurchaseRequest.spare_part)).filter(PurchaseRequest.id == pid).first()
-    if not pr:
-        raise HTTPException(404, "采购申请不存在")
-    sp = lock_spare_part(db, pr.spare_part_id)
-    if not sp:
-        raise HTTPException(404, "对应备件已被删除")
-    # Two receipts of the same order also share the part lock. Refresh its state
-    # after waiting so a completed order cannot pass the old eligibility check.
-    pr = db.query(PurchaseRequest).filter(PurchaseRequest.id == pid).populate_existing().first()
-    if not pr:
-        raise HTTPException(404, "采购申请不存在")
+    pr = _lock_pr(db, pid)
+    sp = pr.spare_part
     request_id = str(payload.request_id) if payload.request_id is not None else None
     if request_id is not None:
         recorded = db.query(PurchaseReceipt).filter(
@@ -304,9 +301,7 @@ def receive_pr(pid: int, payload: PRReceive, db: Session = Depends(get_db), curr
 
 @router.post("/{pid}/cancel")
 def cancel_pr(pid: int, db: Session = Depends(get_db), _: User = Depends(require_supervisor)):
-    pr = db.query(PurchaseRequest).filter(PurchaseRequest.id == pid).first()
-    if not pr:
-        raise HTTPException(404, "采购申请不存在")
+    pr = _lock_pr(db, pid)
     if pr.status in (PRStatus.RECEIVED, PRStatus.CANCELLED):
         raise HTTPException(400, f"状态 {pr.status.value} 不可取消")
     pr.status = PRStatus.CANCELLED
