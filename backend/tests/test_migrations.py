@@ -6,6 +6,23 @@ from app.main import app  # register the current ORM, independently of frozen mi
 
 
 class MigrationChecks:
+    def test_previous_receipt_head_upgrades_reliability_state_atomically(self, migration_engine):
+        from alembic import command
+        from alembic.config import Config
+        from app.migrate import ROOT, upgrade_database
+        engine = migration_engine
+        config = Config(str(ROOT / 'alembic.ini'))
+        with engine.begin() as conn:
+            config.attributes.update(connection=conn, preflight_passed=True)
+            command.upgrade(config, '0003_purchase_receipts')
+            conn.execute(text("INSERT INTO users (username, hashed_password, role, is_active) "
+                              "VALUES ('reliability-previous', 'preserved', 'ADMIN', true)"))
+        assert upgrade_database(engine) == '0004_reliability_state'
+        assert {'purchase_number_sequences', 'safety_outbox'} <= set(inspect(engine).get_table_names())
+        assert upgrade_database(engine) == '0004_reliability_state'
+        with engine.connect() as conn:
+            assert conn.scalar(text('SELECT hashed_password FROM users')) == 'preserved'
+
     def previous_receipt_database(self, engine):
         from alembic import command
         from alembic.config import Config
