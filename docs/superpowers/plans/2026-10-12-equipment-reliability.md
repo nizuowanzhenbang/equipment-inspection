@@ -22,22 +22,22 @@
 
 Files: app/api/purchase_requests.py、app/services/purchases.py、models/purchase_request.py、models/safety_outbox.py、main.py、migrate.py、schema_contract.py、migrations/versions/0004_reliability_state.py、schema_contracts/*-reliability.json；tests/postgresql/test_procurement_boundaries.py、tests/test_migrations.py。
 Interfaces: allocate_purchase_number(db)->str；estimated_amount(qty,price)->Decimal。
-- [ ] 新 API 数量/金额/删除后编号/并发及旧 0003 升级测试，确认真实 RED。
-- [ ] 实现 DTO/Decimal/原子计数和迁移契约，完整套件及两数据库迁移通过，保存提交。
+- [x] 新 API 数量/金额/删除后编号/并发及旧 0003 升级测试，确认真实 RED。
+- [x] 实现 DTO/Decimal/原子计数和迁移契约，完整套件及两数据库迁移通过，保存提交。
 
 ### Task 2 · 共用自动补货与超量收货
 
 Files: services/purchases.py、api/purchase_requests.py、scheduler.py、frontend/src/pages/PurchaseRequestList.tsx；同一新增测试文件/前端测试。
 Interfaces: generate_low_stock(db,applicant)->{created,skipped}，调用方一次提交。
-- [ ] API/调度并发与重复、陈旧库存、建议/金额溢出跳过、合法继续、超收/合法重放 RED。
-- [ ] 共用服务/锁序/拒绝副作用/页面可见原因，实现后全套 backend、PostgreSQL、frontend tests/build/interview_demo，推送 PP-030 阶段。
+- [x] API/调度并发与重复、陈旧库存、建议/金额溢出跳过、合法继续、超收/合法重放 RED。
+- [x] 共用服务/锁序/拒绝副作用/页面可见原因，实现后全套 backend、PostgreSQL、frontend tests/build/interview_demo，推送 PP-030 阶段。
 
 ### Task 3 · 不可变安全 outbox 与严格回执
 
 Files: models/safety_outbox.py、integration/safety_client.py、api/tasks.py/defects.py（按实际必要）、tests/test_safety_delivery.py、tests/postgresql/test_safety_delivery.py。
 Interfaces: mark_pending(db,d) 同缺陷事务；push_one(db,d)->bool；retry_pending(db,limit)->dict。
-- [ ] 真实 HTTP 故障/畸形 ACK、已接受后断线、Session 重启/内容变更、并发投递与本地失败 RED。
-- [ ] 保存/刷新/提交顺序、回执验证与受控错误，完整套件/前端构建/迁移验收后推送候选。
+- [x] 真实 HTTP 故障/畸形 ACK、已接受后断线、Session 重启/内容变更、并发投递与本地失败 RED。
+- [x] 保存/刷新/提交顺序、回执验证与受控错误，完整套件/前端构建/迁移验收后推送候选。
 
 ### Task 4 · 整批审查与发布
 
@@ -63,3 +63,9 @@ Task 1/2: 实现及指定目标验证通过，生产阶段待提交；同批 out
 真实 localhost HTTP/两个数据库首轮 30 failed/4 passed；本地 ACK 保存失败、未配置端点仍需冻存事件的附加回归 4 failed。初始失败提交 754e9b8c79c0df6c027f3f46f34a23861fa83692 已推送。实现后完整发送目标 38 passed，包含源头 API 提交前消息保存、空/畸形/身份错误/非200、响应丢失后新Session、内容变更、两个旧Session并发、数据库确认故障。网络对端仍为临时 HTTP 契约，真正两个应用协议验收待 PP-041 实现。
 
 Ruling: 已存 SYNCED 但无有效隐患引用不能当成功，允许重核 — 原实现会把空回执永久跳过 — 历史没有原消息时只能冻结当前可核对内容，接收端冲突需人工处理；正常已确认历史不重推。ACK 保存失败返回非成功且旧持久消息保留，计数只代表已提交尝试，不保证等于全部网络次数。
+
+## 真正两应用与完整设备验收
+
+发送实现后完整设备后端582 passed（SQLite与真实PostgreSQL，无环境跳过），前端16 passed与构建通过。真正配对测试最初仅缺 ORM 注册，修正harness后旧接收端e5e62e7实跑2 failed：正常回执缺身份、丢回执后缺原子收据。新接收端56f494a527dd71820400fc57cad7f6fdf35013f9实跑2 passed，两个独立应用/数据库/进程及真实HTTP代理；对端提交后只丢第一ACK，发送进程退出、源内容/设备改名后重启，仍发原事件且只有一张隐患/收据。
+
+新增 safety_contract CI 固定配对接收代码；普通无配置测试可跳过配对，本地最终全套和独立CI显式提供根目录，不能将跳过写成对接通过。接收端候选完整113 passed/1 intentional skip，最后整批审查与发布仍待。
