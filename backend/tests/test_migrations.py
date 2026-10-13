@@ -45,7 +45,7 @@ class MigrationChecks:
         self.previous_receipt_database(engine)
         upgrade_database(engine)
         assert 'purchase_receipts' in inspect(engine).get_table_names()
-        assert check_database(engine) == '0003_purchase_receipts'
+        assert check_database(engine) == '0004_reliability_state'
         upgrade_database(engine)
         with engine.connect() as conn:
             assert conn.scalar(text('SELECT hashed_password FROM users')) == 'preserved'
@@ -98,7 +98,7 @@ class MigrationChecks:
                 operation(engine)
         assert 'purchase_receipts' not in inspect(engine).get_table_names()
         with engine.connect() as conn:
-            assert conn.scalar(text('SELECT version_num FROM alembic_version')) == '0003_purchase_receipts'
+            assert conn.scalar(text('SELECT version_num FROM alembic_version')) == '0004_reliability_state'
 
     def test_failed_ddl_rolls_back_known_additions_and_version(self, migration_engine):
         from app.migrate import upgrade_database

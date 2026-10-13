@@ -4,12 +4,12 @@
 """
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import Annotated, Literal, Optional
+from math import isfinite
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db, get_current_user, require_write, require_supervisor
@@ -17,18 +17,26 @@ from app.models.purchase_request import PurchaseRequest, PurchaseReceipt, PRStat
 from app.models.spare_part import SparePart, StockMovement, StockMovementType
 from app.models.user import User
 from app.schemas.spare_part import InventoryDecimal, MAX_STOCK_QUANTITY
-from app.utils.helpers import api_response, paginate_response, generate_pr_no
+from app.utils.helpers import api_response, paginate_response
 from app.utils.audit import log as audit_log
 from app.utils.transactions import lock_spare_part
 from app.integration.procurement_client import push_request
+from app.services.purchases import allocate_purchase_number, estimated_amount, generate_low_stock
 
 router = APIRouter(prefix="/api/purchase-requests", tags=["采购申请"])
 
 
+def normalize_nonfinite(value):
+    return str(value) if isinstance(value, float) and not isfinite(value) else value
+
+
+PurchaseQuantity = Annotated[InventoryDecimal, Field(gt=0), BeforeValidator(normalize_nonfinite)]
+
+
 class PRCreate(BaseModel):
     spare_part_id: int
-    qty: float
-    urgency: str = "NORMAL"
+    qty: PurchaseQuantity
+    urgency: Literal["NORMAL", "URGENT"] = "NORMAL"
     reason: Optional[str] = None
 
 
@@ -79,16 +87,6 @@ def _to_dict(pr: PurchaseRequest) -> dict:
     return d
 
 
-def _next_pr_seq(db: Session) -> int:
-    today = datetime.utcnow().date()
-    n = (
-        db.query(func.count(PurchaseRequest.id))
-        .filter(func.date(PurchaseRequest.created_at) == today)
-        .scalar() or 0
-    )
-    return n + 1
-
-
 @router.get("")
 def list_prs(
     page: int = Query(1, ge=1),
@@ -110,16 +108,15 @@ def list_prs(
 
 @router.post("")
 def create_pr(payload: PRCreate, db: Session = Depends(get_db), current: User = Depends(require_write)):
-    sp = db.query(SparePart).filter(SparePart.id == payload.spare_part_id).first()
+    sp = lock_spare_part(db, payload.spare_part_id)
     if not sp:
         raise HTTPException(404, "备件不存在")
-    if payload.qty <= 0:
-        raise HTTPException(400, "采购数量必须大于 0")
+    amount = estimated_amount(payload.qty, sp.unit_price)
     pr = PurchaseRequest(
-        pr_no=generate_pr_no(_next_pr_seq(db)),
+        pr_no=allocate_purchase_number(db),
         spare_part_id=sp.id,
         qty=payload.qty,
-        estimated_amount=float(payload.qty) * float(sp.unit_price or 0),
+        estimated_amount=amount,
         urgency=payload.urgency,
         reason=payload.reason,
         source=PRSource.MANUAL,
@@ -135,37 +132,11 @@ def create_pr(payload: PRCreate, db: Session = Depends(get_db), current: User = 
 @router.post("/auto-generate")
 def auto_generate(db: Session = Depends(get_db), current: User = Depends(require_write)):
     """扫描所有低库存备件，没有 in-flight 申请的自动建一张草稿"""
-    candidates = db.query(SparePart).filter(SparePart.stock_qty < SparePart.min_qty).all()
-    created: List[dict] = []
-    in_flight_statuses = (PRStatus.DRAFT, PRStatus.SUBMITTED, PRStatus.APPROVED, PRStatus.SENT)
-    for sp in candidates:
-        exists = (
-            db.query(PurchaseRequest)
-            .filter(PurchaseRequest.spare_part_id == sp.id, PurchaseRequest.status.in_(in_flight_statuses))
-            .first()
-        )
-        if exists:
-            continue
-        suggested_qty = max(float(sp.min_qty or 0) * 2 - float(sp.stock_qty or 0), float(sp.min_qty or 0))
-        pr = PurchaseRequest(
-            pr_no=generate_pr_no(_next_pr_seq(db)),
-            spare_part_id=sp.id,
-            qty=suggested_qty,
-            estimated_amount=suggested_qty * float(sp.unit_price or 0),
-            urgency="URGENT" if float(sp.stock_qty or 0) <= 0 else "NORMAL",
-            reason=f"低库存自动触发：当前 {sp.stock_qty}，安全 {sp.min_qty}",
-            source=PRSource.AUTO_LOW_STOCK,
-            status=PRStatus.SUBMITTED,
-            applicant=current.username,
-            submitted_at=datetime.utcnow(),
-        )
-        db.add(pr)
-        db.flush()
-        created.append({"pr_no": pr.pr_no, "spare_part_code": sp.code, "qty": suggested_qty})
-    db.commit()
+    result = generate_low_stock(db, current.username)
     audit_log(db, actor=current.username, action="pr.auto_generate",
-              target_type="PurchaseRequest", summary=f"自动生成 {len(created)} 张采购申请")
-    return api_response(message=f"已生成 {len(created)} 张", data={"created": created})
+              target_type="PurchaseRequest", summary=f"自动生成 {len(result['created'])} 张采购申请，跳过 {len(result['skipped'])} 项")
+    db.commit()
+    return api_response(message=f"已生成 {len(result['created'])} 张，跳过 {len(result['skipped'])} 项", data=result)
 
 
 @router.get("/{pid}")
@@ -272,6 +243,8 @@ def receive_pr(pid: int, payload: PRReceive, db: Session = Depends(get_db), curr
     new_received = (pr.received_qty or Decimal("0")) + quantity
     if new_stock > MAX_STOCK_QUANTITY or new_received > MAX_STOCK_QUANTITY:
         raise HTTPException(400, "累计库存或收货数量超出上限")
+    if new_received > pr.qty:
+        raise HTTPException(409, "到货数量超过采购单剩余数量，请另行核对额外到货")
     mv = StockMovement(
         spare_part_id=sp.id,
         movement_type=StockMovementType.IN,

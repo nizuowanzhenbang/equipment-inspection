@@ -49,3 +49,11 @@ Interfaces: mark_pending(db,d) 同缺陷事务；push_one(db,d)->bool；retry_pe
 当前只读核查/基线。插件 supporting-script resource 读取不可用，沿已版本化本计划与中央日志记录 brief/BASE/命令/结果；不读取或删除其他计划工作区。完整基线设备 306 passed/186 PostgreSQL skipped，安全 68 passed；第一条安全测试从根目录执行缺少 app 导入路径，改在 backend 按 CI 命令运行后通过，不计业务 RED。
 
 Pre-flight: Task 1 提供编号/表/金额；Task 2 调用相同服务与锁序；Task 3 使用 Task 1 已创建 outbox，schema contract 必须包含两张新增表；接收 ACK 身份契约由 PP-041 提供，按接收端先部署。
+
+## 采购实现阶段（2026-10-13 接续）
+
+首次 48 个双数据库 API 回归 40 failed/8 passed，迁移旧头升级 1 failed；实现后目标采购/SQLite 迁移 66 passed。完整后端连真实 PostgreSQL 与同版本客户端 542 passed，原 PostgreSQL 客户端缺失失败均已排除。随后新增畸形 Unicode 编号后缀：先 2 failed、修复后 2 passed；最终整批完整套件将覆盖该新增用例。
+
+前端既有 16 passed，TypeScript/Vite 构建通过；首次构建发现 autoGenerate 响应类型未同步 skipped，已按真实服务字段补齐。金额/编号/补货/超量收货已实现并保持身份重放；根目录与 backend 测试/import 路径错误仅作工具错误记录，不计业务 RED。无现场或跨库 exactly-once 声明。
+
+Task 1/2: 实现及指定目标验证通过，生产阶段待提交；同批 outbox/接收端仍待实现，未合并。本计划最终闭合以全分支完整验证和中央签收为准。

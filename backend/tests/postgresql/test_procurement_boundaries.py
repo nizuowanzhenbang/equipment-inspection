@@ -96,6 +96,18 @@ def test_deleted_purchase_does_not_reuse_any_allocated_number(stock_context):
     assert third.json()['data']['pr_no'] not in numbers
 
 
+def test_legacy_maximum_is_respected_and_malformed_suffix_ignored(stock_context):
+    ctx = stock_context
+    prefix = datetime.utcnow().strftime('PR-%Y%m%d-')
+    with ctx.factory() as db:
+        for suffix in ['9003', '²']:
+            db.add(PurchaseRequest(pr_no=prefix+suffix, spare_part_id=ctx.part_id, qty=1))
+        db.commit()
+    response = create(ctx)
+    assert response.status_code == 200, response.text
+    assert int(response.json()['data']['pr_no'][len(prefix):]) > 9003
+
+
 @contextmanager
 def expose_unlocked_legacy_reads(engine, kind):
     """只暂停真实旧的未加锁检查，不替换查询结果或当前锁实现。"""
