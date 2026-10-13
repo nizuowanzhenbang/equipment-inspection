@@ -101,7 +101,8 @@ export default function DefectList() {
   const syncTag = (r: Defect) => {
     if (r.severity !== 'CRITICAL') return <Tag>不适用</Tag>
     const s = r.safety_sync_status
-    if (s === 'SYNCED') return <Tag color="green" title={r.safety_hazard_no || ''}>已联动 {r.safety_hazard_no || ''}</Tag>
+    if (s === 'SYNCED' && r.safety_hazard_no?.trim()) return <Tag color="green" title={r.safety_hazard_no}>已联动 {r.safety_hazard_no}</Tag>
+    if (s === 'SYNCED') return <Tag color="red">回执缺失，待确认</Tag>
     if (s === 'FAILED') return <Tag color="red">联动失败({r.safety_sync_attempts || 0})</Tag>
     if (s === 'PENDING') return <Tag color="orange">联动中</Tag>
     if (s === 'SKIPPED') return <Tag>跳过</Tag>
@@ -161,7 +162,7 @@ export default function DefectList() {
                 {supervisor && r.status === 'REPAIRED' && (
                   <Button size="small" type="primary" onClick={() => { setCurrent(r); setVerifyOpen(true) }}>验收</Button>
                 )}
-                {supervisor && r.severity === 'CRITICAL' && r.safety_sync_status !== 'SYNCED' && (
+                {supervisor && r.severity === 'CRITICAL' && (r.safety_sync_status !== 'SYNCED' || !r.safety_hazard_no?.trim()) && (
                   <Button size="small" onClick={async () => {
                     const resp = await defectApi.safetySync(r.id)
                     message.info(resp.message || '已触发')

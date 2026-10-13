@@ -13,10 +13,13 @@ from datetime import datetime
 from typing import Optional
 
 import httpx
+from sqlalchemy import and_, or_, func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.defect import Defect, DefectSeverity
+from app.models.safety_outbox import SafetyOutbox
 
 logger = logging.getLogger("equipment_inspection.integration")
 
@@ -48,77 +51,122 @@ def should_sync(d: Defect) -> bool:
     return d.severity == DefectSeverity.CRITICAL
 
 
+def _reference(value):
+    return (isinstance(value, str) and bool(value.strip()) and len(value) <= 50
+            and all(ord(char) >= 32 for char in value))
+
+
+def _lock_defect(db, did):
+    db.query(Defect).filter(Defect.id == did).update(
+        {Defect.updated_at: Defect.updated_at}, synchronize_session=False)
+    return db.query(Defect).filter(Defect.id == did).populate_existing().first()
+
+
+def _message(db, d):
+    row = db.get(SafetyOutbox, d.id)
+    if row is None:
+        row = SafetyOutbox(defect_id=d.id, payload=_build_payload(d))
+        db.add(row)
+        db.flush()
+    return row
+
+
 def mark_pending(db: Session, d: Defect) -> None:
-    """标记缺陷待联动（在 defect 落库后立即调用，便于失败时定时重试）"""
+    """与 CRITICAL 缺陷一起提交原消息，未配置端点也保留原始事件。"""
     if not should_sync(d):
         d.safety_sync_status = SAFETY_SYNC_SKIPPED
-    elif not settings.SAFETY_SYSTEM_URL:
-        d.safety_sync_status = SAFETY_SYNC_SKIPPED
-        d.safety_sync_error = "SAFETY_SYSTEM_URL 未配置"
     else:
-        d.safety_sync_status = SAFETY_SYNC_PENDING
+        _message(db, d)
+        if not settings.SAFETY_SYSTEM_URL:
+            d.safety_sync_status = SAFETY_SYNC_SKIPPED
+            d.safety_sync_error = "SAFETY_SYSTEM_URL 未配置"
+        else:
+            d.safety_sync_status = SAFETY_SYNC_PENDING
+            d.safety_sync_error = None
     db.flush()
 
 
+class DeliveryError(Exception):
+    """仅允许受控的联动原因进入业务记录。"""
+
+
 def push_one(db: Session, d: Defect) -> bool:
-    """同步推送一条缺陷到 plant-safety。返回是否成功。"""
-    if d.safety_sync_status == SAFETY_SYNC_SYNCED:
+    """原消息可重发；串行投递并核对身份，未持久确认绝不返回成功。"""
+    did = d.id
+    d = _lock_defect(db, did)
+    if d is None:
+        db.rollback()
+        return False
+    if d.safety_sync_status == SAFETY_SYNC_SYNCED and _reference(d.safety_hazard_no):
+        db.commit()
         return True
     if not should_sync(d):
         d.safety_sync_status = SAFETY_SYNC_SKIPPED
         db.commit()
-        return True
+        return False
+    _message(db, d)
     if not settings.SAFETY_SYSTEM_URL:
         d.safety_sync_status = SAFETY_SYNC_SKIPPED
         d.safety_sync_error = "SAFETY_SYSTEM_URL 未配置"
         db.commit()
         return False
-
-    url = settings.SAFETY_SYSTEM_URL.rstrip("/") + "/api/integration/hazards"
-    headers = {
-        "X-Integration-Secret": settings.INTEGRATION_SECRET,
-        "Content-Type": "application/json",
-    }
-    payload = _build_payload(d)
+    # 历史消息先提交，再开始网络；已有 outbox 不重新构造。
+    d.safety_sync_status = SAFETY_SYNC_PENDING
+    db.commit()
+    d = _lock_defect(db, did)
+    if d.safety_sync_status == SAFETY_SYNC_SYNCED and _reference(d.safety_hazard_no):
+        db.commit()
+        return True
+    payload = db.get(SafetyOutbox, did).payload
     d.safety_sync_attempts = (d.safety_sync_attempts or 0) + 1
+    success = False
     try:
-        resp = httpx.post(url, json=payload, headers=headers, timeout=settings.INTEGRATION_TIMEOUT_SEC)
-        if resp.status_code >= 400:
-            d.safety_sync_status = SAFETY_SYNC_FAILED
-            d.safety_sync_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
-            db.commit()
-            logger.warning("[safety_sync] %s HTTP %s", d.defect_no, resp.status_code)
-            return False
-        body = resp.json() if resp.content else {}
-        data = body.get("data") or {}
-        d.safety_hazard_no = data.get("hazard_no")
+        response = httpx.post(settings.SAFETY_SYSTEM_URL.rstrip("/")+"/api/integration/hazards",
+                              json=payload, headers={"X-Integration-Secret": settings.INTEGRATION_SECRET},
+                              timeout=settings.INTEGRATION_TIMEOUT_SEC, follow_redirects=False)
+        if response.status_code != 200:
+            raise DeliveryError(f"HTTP {response.status_code}")
+        body = response.json()
+        data = body.get('data') if isinstance(body, dict) else None
+        if (not isinstance(body, dict) or body.get('code') != 200 or not isinstance(data, dict)
+                or type(data.get('id')) is not int or data['id'] <= 0
+                or not _reference(data.get('hazard_no'))):
+            raise DeliveryError("联动回执缺少有效隐患引用")
+        if (data.get('source_system') != payload['source_system']
+                or data.get('external_no') != payload['external_no']):
+            raise DeliveryError("联动回执来源或单号不匹配")
+        d.safety_hazard_no = data['hazard_no'].strip()
         d.safety_sync_status = SAFETY_SYNC_SYNCED
         d.safety_sync_at = datetime.utcnow()
         d.safety_sync_error = None
-        db.commit()
-        logger.info("[safety_sync] %s -> %s", d.defect_no, d.safety_hazard_no)
-        return True
-    except Exception as e:  # noqa: BLE001
+        success = True
+    except DeliveryError as exc:
         d.safety_sync_status = SAFETY_SYNC_FAILED
-        d.safety_sync_error = f"{type(e).__name__}: {str(e)[:200]}"
+        d.safety_sync_error = str(exc)
+    except httpx.HTTPError as exc:
+        d.safety_sync_status = SAFETY_SYNC_FAILED
+        d.safety_sync_error = f"网络请求失败（{type(exc).__name__}）"
+    except (ValueError, TypeError):
+        d.safety_sync_status = SAFETY_SYNC_FAILED
+        d.safety_sync_error = "联动回执格式不正确"
+    try:
         db.commit()
-        logger.warning("[safety_sync] %s 异常: %s", d.defect_no, e)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.warning("[safety_sync] local confirmation was not saved; queued message remains")
         return False
+    return success
 
 
 def retry_pending(db: Session, limit: int = 50) -> dict:
-    """扫描 PENDING/FAILED 的待联动缺陷重试。"""
-    rows = (
-        db.query(Defect)
-        .filter(
-            Defect.severity == DefectSeverity.CRITICAL,
-            Defect.safety_sync_status.in_([SAFETY_SYNC_PENDING, SAFETY_SYNC_FAILED]),
-        )
-        .order_by(Defect.created_at.asc())
-        .limit(limit)
-        .all()
-    )
-    ok, fail = 0, 0
+    """只重试待确认/失败和没有引用的旧成功标记，不回填正常历史成功。"""
+    rows = db.query(Defect).filter(
+        Defect.severity == DefectSeverity.CRITICAL,
+        or_(Defect.safety_sync_status.in_([SAFETY_SYNC_PENDING, SAFETY_SYNC_FAILED]),
+            and_(Defect.safety_sync_status == SAFETY_SYNC_SYNCED,
+                 or_(Defect.safety_hazard_no.is_(None), func.trim(Defect.safety_hazard_no) == '')))
+    ).order_by(Defect.created_at.asc(), Defect.id.asc()).limit(limit).all()
+    ok = fail = 0
     for d in rows:
         if push_one(db, d):
             ok += 1
