@@ -13,7 +13,6 @@ from datetime import datetime
 from typing import Optional
 
 import httpx
-from sqlalchemy import and_, or_, func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -159,13 +158,21 @@ def push_one(db: Session, d: Defect) -> bool:
 
 
 def retry_pending(db: Session, limit: int = 50) -> dict:
-    """只重试待确认/失败和没有引用的旧成功标记，不回填正常历史成功。"""
-    rows = db.query(Defect).filter(
-        Defect.severity == DefectSeverity.CRITICAL,
-        or_(Defect.safety_sync_status.in_([SAFETY_SYNC_PENDING, SAFETY_SYNC_FAILED]),
-            and_(Defect.safety_sync_status == SAFETY_SYNC_SYNCED,
-                 or_(Defect.safety_hazard_no.is_(None), func.trim(Defect.safety_hazard_no) == '')))
-    ).order_by(Defect.created_at.asc(), Defect.id.asc()).limit(limit).all()
+    """分段核对历史引用，limit 只限制待投递项，正常成功项不占名额。"""
+    rows, after_id = [], 0
+    while len(rows) < limit:
+        page = db.query(Defect).filter(
+            Defect.id > after_id, Defect.severity == DefectSeverity.CRITICAL,
+            Defect.safety_sync_status.in_([SAFETY_SYNC_PENDING, SAFETY_SYNC_FAILED, SAFETY_SYNC_SYNCED]),
+        ).order_by(Defect.id.asc()).limit(100).all()
+        if not page:
+            break
+        after_id = page[-1].id
+        for item in page:
+            if item.safety_sync_status != SAFETY_SYNC_SYNCED or not _reference(item.safety_hazard_no):
+                rows.append(item)
+                if len(rows) == limit:
+                    break
     ok = fail = 0
     for d in rows:
         if push_one(db, d):

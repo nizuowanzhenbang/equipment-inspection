@@ -9,7 +9,7 @@ from math import isfinite
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db, get_current_user, require_write, require_supervisor
@@ -30,6 +30,16 @@ def normalize_nonfinite(value):
     return str(value) if isinstance(value, float) and not isfinite(value) else value
 
 
+def safe_json_values(value):
+    if isinstance(value, float) and not isfinite(value):
+        return {'non_finite': str(value)}
+    if isinstance(value, dict):
+        return {key: safe_json_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [safe_json_values(item) for item in value]
+    return value
+
+
 PurchaseQuantity = Annotated[InventoryDecimal, Field(gt=0), BeforeValidator(normalize_nonfinite)]
 
 
@@ -38,6 +48,11 @@ class PRCreate(BaseModel):
     qty: PurchaseQuantity
     urgency: Literal["NORMAL", "URGENT"] = "NORMAL"
     reason: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def serialize_invalid_values(cls, value):
+        return safe_json_values(value)
 
 
 class PRApprove(BaseModel):

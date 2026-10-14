@@ -125,7 +125,7 @@ def deliver(ctx, did):
 
 
 @pytest.mark.parametrize('case', ['empty', 'bad-json', 'business-error', 'missing-id', 'bool-id',
-                                 'missing-number', 'wrong-source', 'wrong-key'])
+                                 'missing-number', 'long-number', 'wrong-source', 'wrong-key'])
 def test_invalid_ack_never_marks_synced(delivery_ctx, monkeypatch, case):
     ctx = delivery_ctx
     def malformed(body):
@@ -135,6 +135,7 @@ def test_invalid_ack_never_marks_synced(delivery_ctx, monkeypatch, case):
         if case == 'missing-id': body['data'].pop('id')
         if case == 'bool-id': body['data']['id'] = True
         if case == 'missing-number': body['data']['hazard_no'] = ''
+        if case == 'long-number': body['data']['hazard_no'] = 'x'*51
         if case == 'wrong-source': body['data']['source_system'] = 'other'
         if case == 'wrong-key': body['data']['external_no'] = 'other'
         return body
@@ -267,7 +268,7 @@ def test_missing_endpoint_still_freezes_original_critical_message(delivery_ctx, 
         assert remote.requests[0]['description'] == '原始测点异常'
 
 
-@pytest.mark.parametrize('reference', [None, '', ' ', '\t', '\n', 'bad\tref', 'x'*51])
+@pytest.mark.parametrize('reference', [None, '', ' ', '\t', '\n', 'bad\tref'])
 def test_retry_recovers_all_invalid_legacy_references(delivery_ctx, monkeypatch, reference):
     ctx = delivery_ctx
     did = defect(ctx, status='SYNCED')

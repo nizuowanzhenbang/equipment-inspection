@@ -83,7 +83,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nizuowanzhenbang/plant-safety
-          ref: 56f494a527dd71820400fc57cad7f6fdf35013f9
+          ref: 6f12503f00fdd485a55e737f17d08e8ff8b833f0
           path: paired-safety
       - uses: actions/setup-python@v5
         with:

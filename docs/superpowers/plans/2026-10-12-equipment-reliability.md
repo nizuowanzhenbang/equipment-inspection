@@ -41,7 +41,7 @@ Interfaces: mark_pending(db,d) 同缺陷事务；push_one(db,d)->bool；retry_pe
 
 ### Task 4 · 整批审查与发布
 
-- [ ] 接收端 PP-041 按独立计划完成；一次 fresh-context 整批两分支审查与冷恢复，Important 单次 RED→GREEN 修复，无重复审查。
+- [x] 接收端 PP-041 按独立计划完成；一次 fresh-context 整批两分支审查与冷恢复，Important 单次 RED→GREEN 修复，无重复审查。
 - [ ] 接收端先发布，发送/采购再发布；固定候选及 main CI 通过；每项真实合并检查点/release/索引和最终摘要回写。
 
 ## 执行台账
@@ -69,3 +69,23 @@ Ruling: 已存 SYNCED 但无有效隐患引用不能当成功，允许重核 —
 发送实现后完整设备后端582 passed（SQLite与真实PostgreSQL，无环境跳过），前端16 passed与构建通过。真正配对测试最初仅缺 ORM 注册，修正harness后旧接收端e5e62e7实跑2 failed：正常回执缺身份、丢回执后缺原子收据。新接收端56f494a527dd71820400fc57cad7f6fdf35013f9实跑2 passed，两个独立应用/数据库/进程及真实HTTP代理；对端提交后只丢第一ACK，发送进程退出、源内容/设备改名后重启，仍发原事件且只有一张隐患/收据。
 
 新增 safety_contract CI 固定配对接收代码；普通无配置测试可跳过配对，本地最终全套和独立CI显式提供根目录，不能将跳过写成对接通过。接收端候选完整113 passed/1 intentional skip，最后整批审查与发布仍待。
+
+
+## 整批审查与单次 Important 修正轮 · 2026-10-14
+
+一次 fresh-context 整批审查固定设备8047049..57816f8、安全e5e62e7..56f494a；Critical 0 / Important 3 / Minor 3。设备审查者目标88 passed；接收45 passed/1刻意跳过；另有父代理完整584/113通过。不是再次审查。R1安全编号由接收、人工、检查三个入口统一事务内分配；R2采购全请求递归处理非有限非法输入；R3扫描/页面/重推采用同一引用有效性。设备新增回归首轮18 failed/6 passed，其中17项为真实业务失败，1项为测试试图写入PG varchar(50)的51字非法历史引用；该状态在PG不可能，已改为两库均验证超长ACK拒绝，未将夹具失败当业务RED；安全回归2 failed/2 passed（PG的人工、检查入口确实500）。失败提交设备e17b69d、安全9752f18已推送。
+
+Ruling R1（接受 Important）：新增独立日序号表，三个隐患入口共享分配，旧编号按最大合法后缀接续，不依赖ID/条数；代价是额外小表和同日编号事务串行，新老写入进程应在维护窗口切换，不允许旧进程继续用count编号。
+Ruling R2（接受 Important）：整个创建DTO递归替换非有限坏值为可序列化非法值，错误仍422且无写入；代价为按请求结构递归遍历，合法数值语义保持。
+Ruling R3（接受 Important）：按主键分段读取历史状态、以同一Python有效性函数筛选待投递，正常历史不占limit也不发送；页面匹配同一空白/控制字符/Unicode码点上限。代价是恢复扫描需要读历史成功行，且优先顺序采用ID升序；容量/性能未验收。
+
+Minor全部延期并明确保留：M1接收升级备份/维护窗口操作文档未补；M2采购页面无独立剩余数量展示（上限已正确）；M3安全SKIPPED/失败原因未进入正常DefectResponse/读取界面（库中有原因，手动重试会展示）。依执行计划只修复Important的一轮要求，不将其漏记或称全部规范完成。
+
+Declined-to-judge：现场有效性、容量/性能、真实第三方运行、任意数据库篡改完整恢复、跨库exactly-once均超范围，接受此边界；成本是本次通过只证明版本化原型与明确故障契约。历史无原消息只能核对已存投影，以及ACK保存失败计数只代表已提交尝试，原Ruling继续有效。
+
+
+## 最终候选验证
+
+Important单轮修正后完整设备后端608 passed（SQLite、真实PostgreSQL16、同版本备份客户端、真正两应用2项均执行，无环境跳过）；前端18 passed及TypeScript/Vite构建，ruff/pip check/interview_demo通过。完整命令从backend执行：SCHEDULER_ENABLED=false TEST_POSTGRESQL_URL=<隔离测试库> PG_DUMP=<同版客户端> PG_RESTORE=<同版客户端> SAFETY_PEER_ROOT=<固定接收代码> python -m pytest tests -q。PG超长历史引用夹具已改为真实可发生的超长ACK拒绝，不再把数据库本已阻止的非法状态作为恢复前提。
+
+接收端PR #4已先合并为6f12503f00fdd485a55e737f17d08e8ff8b833f0，候选与main三项CI成功，合并树与本地受测6ff90ca完全一致；设备配对CI固定该实际发布SHA。唯一审查已闭合Important，无复审；三项Minor仍延期。设备候选CI与合并/main CI待执行。
