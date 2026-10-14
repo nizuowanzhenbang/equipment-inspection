@@ -1,0 +1,66 @@
+{
+  "purchase_number_sequences": {
+    "checks": [],
+    "columns": {
+      "day": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "VARCHAR(8)"
+      },
+      "last_value": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "INTEGER"
+      }
+    },
+    "foreign_keys": [],
+    "indexes": {},
+    "pk": [
+      "day"
+    ],
+    "unique": []
+  },
+  "safety_outbox": {
+    "checks": [],
+    "columns": {
+      "created_at": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "DATETIME"
+      },
+      "defect_id": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "INTEGER"
+      },
+      "payload": {
+        "default": null,
+        "enum": null,
+        "nullable": false,
+        "type": "JSON"
+      }
+    },
+    "foreign_keys": [
+      {
+        "columns": [
+          "defect_id"
+        ],
+        "options": {},
+        "schema": null,
+        "table": "defects",
+        "target": [
+          "id"
+        ]
+      }
+    ],
+    "indexes": {},
+    "pk": [
+      "defect_id"
+    ],
+    "unique": []
+  }
+}

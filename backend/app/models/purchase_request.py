@@ -24,6 +24,13 @@ class PRSource(str, enum.Enum):
     MANUAL = "MANUAL"                   # 手工
 
 
+class PurchaseNumberSequence(Base):
+    """日内分配记录不会随着采购单删除而重用。"""
+    __tablename__ = "purchase_number_sequences"
+    day = Column(String(8), primary_key=True)
+    last_value = Column(Integer, nullable=False)
+
+
 class PurchaseRequest(Base):
     __tablename__ = "purchase_requests"
 

@@ -121,6 +121,11 @@ export default function PurchaseRequestList() {
     try {
       const r = await purchaseRequestApi.autoGenerate()
       message.success(`已为低库存备件生成 ${r.data.created.length} 张采购申请`)
+      if (r.data.skipped?.length) {
+        Modal.warning({ title: '部分备件未生成采购申请，请核对',
+          content: <ul>{r.data.skipped.map((item: { spare_part_code: string; reason: string }) =>
+            <li key={item.spare_part_code}>{item.spare_part_code}：{item.reason}</li>)}</ul> })
+      }
       load()
     } catch (e: any) { message.error(e?.detail || '失败') }
   }
@@ -229,7 +234,7 @@ export default function PurchaseRequestList() {
             />
           </Form.Item>
           <Form.Item name="qty" label="数量" rules={[{ required: true, type: 'number', min: 0.01 }]}>
-            <InputNumber style={{ width: '100%' }} min={0.01} step={1} />
+            <InputNumber style={{ width: '100%' }} min={0.01} max={99999999.99} precision={2} step={1} />
           </Form.Item>
           <Form.Item name="urgency" label="紧急度">
             <Select options={[{ label: '普通', value: 'NORMAL' }, { label: '紧急', value: 'URGENT' }]} />
@@ -318,7 +323,9 @@ export default function PurchaseRequestList() {
         </>}
         <Form form={receiveForm} layout="vertical">
           <Form.Item name="received_qty" label="本次入库数量" rules={[{ required: true, type: 'number', min: 0.01 }]}>
-            <InputNumber style={{ width: '100%' }} min={0.01} max={99999999.99} precision={2} disabled={!!pendingReceipt || receiving || receiptStorageError} />
+            <InputNumber style={{ width: '100%' }} min={0.01}
+              max={pendingReceipt ? 99999999.99 : Math.max(0, Number(((detail?.qty ?? 0) - (detail?.received_qty ?? 0)).toFixed(2)))}
+              precision={2} disabled={!!pendingReceipt || receiving || receiptStorageError} />
           </Form.Item>
         </Form>
       </Modal>

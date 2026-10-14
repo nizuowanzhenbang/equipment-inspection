@@ -62,7 +62,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-16
       - name: PostgreSQL transaction regression tests
-        run: cd backend && python -m pytest tests/postgresql -q --junitxml=postgresql-results.xml
+        run: cd backend && python -m pytest tests/postgresql tests/test_safety_delivery.py -q --junitxml=postgresql-results.xml
       - name: Preserve PostgreSQL test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -71,6 +71,28 @@ jobs:
           path: backend/postgresql-results.xml
           if-no-files-found: warn
           retention-days: 14
+  safety_contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_MODE: demo
+      SCHEDULER_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout fixed paired receiver
+        uses: actions/checkout@v4
+        with:
+          repository: nizuowanzhenbang/plant-safety
+          ref: 6f12503f00fdd485a55e737f17d08e8ff8b833f0
+          path: paired-safety
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install locked compatible backend dependencies
+        run: python -m pip install --require-hashes -r backend/requirements-dev.lock
+      - name: Actual application restart and lost-ACK contract
+        run: SAFETY_PEER_ROOT="$GITHUB_WORKSPACE/paired-safety" python -m pytest tests/test_safety_contract.py -q
+        working-directory: backend
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15

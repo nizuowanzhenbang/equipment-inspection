@@ -279,7 +279,7 @@ export const purchaseRequestApi = {
   create: (data: { spare_part_id: number; qty: number; urgency?: string; reason?: string }) =>
     api.post<unknown, ApiResponse<PurchaseRequest>>('/purchase-requests', data),
   autoGenerate: () =>
-    api.post<unknown, ApiResponse<{ created: any[] }>>(`/purchase-requests/auto-generate`),
+    api.post<unknown, ApiResponse<{ created: any[]; skipped?: { spare_part_id: number; spare_part_code: string; reason: string }[] }>>(`/purchase-requests/auto-generate`),
   get: (id: number) => api.get<unknown, ApiResponse<PurchaseRequest>>(`/purchase-requests/${id}`),
   submit: (id: number) => api.post<unknown, ApiResponse<null>>(`/purchase-requests/${id}/submit`),
   approve: (id: number, notes?: string) => api.post<unknown, ApiResponse<null>>(`/purchase-requests/${id}/approve`, { notes }),

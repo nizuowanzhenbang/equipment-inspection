@@ -158,41 +158,11 @@ def retry_safety_sync(db: Session) -> dict:
 @_with_db
 def auto_generate_purchase_requests(db: Session) -> dict:
     """扫描低库存备件，为没有 in-flight 申请的自动建草稿（每日一次）"""
-    in_flight = (PRStatus.DRAFT, PRStatus.SUBMITTED, PRStatus.APPROVED, PRStatus.SENT)
-    candidates = db.query(SparePart).filter(SparePart.stock_qty < SparePart.min_qty).all()
-    today = datetime.utcnow().date()
-    next_seq = (
-        db.query(func.count(PurchaseRequest.id))
-        .filter(func.date(PurchaseRequest.created_at) == today)
-        .scalar() or 0
-    )
-    created: list[str] = []
-    for sp in candidates:
-        exists = (
-            db.query(PurchaseRequest)
-            .filter(PurchaseRequest.spare_part_id == sp.id, PurchaseRequest.status.in_(in_flight))
-            .first()
-        )
-        if exists:
-            continue
-        next_seq += 1
-        suggested_qty = max(float(sp.min_qty or 0) * 2 - float(sp.stock_qty or 0), float(sp.min_qty or 0))
-        pr = PurchaseRequest(
-            pr_no=generate_pr_no(next_seq),
-            spare_part_id=sp.id,
-            qty=suggested_qty,
-            estimated_amount=suggested_qty * float(sp.unit_price or 0),
-            urgency="URGENT" if float(sp.stock_qty or 0) <= 0 else "NORMAL",
-            reason=f"低库存自动触发：当前 {sp.stock_qty}，安全 {sp.min_qty}",
-            source=PRSource.AUTO_LOW_STOCK,
-            status=PRStatus.SUBMITTED,
-            applicant="scheduler",
-            submitted_at=datetime.utcnow(),
-        )
-        db.add(pr)
-        created.append(pr.pr_no)
+    from app.services.purchases import generate_low_stock
+    result = generate_low_stock(db, "scheduler")
     db.commit()
-    return {"created": created, "total": len(created)}
+    return {"created": [item["pr_no"] for item in result["created"]],
+            "total": len(result["created"]), "skipped": result["skipped"]}
 
 
 def start_scheduler() -> None:
