@@ -265,3 +265,38 @@ def test_missing_endpoint_still_freezes_original_critical_message(delivery_ctx, 
     with peer(monkeypatch) as remote:
         assert deliver(ctx, did) is True
         assert remote.requests[0]['description'] == '原始测点异常'
+
+
+@pytest.mark.parametrize('reference', [None, '', ' ', '\t', '\n', 'bad\tref', 'x'*51])
+def test_retry_recovers_all_invalid_legacy_references(delivery_ctx, monkeypatch, reference):
+    ctx = delivery_ctx
+    did = defect(ctx, status='SYNCED')
+    with ctx.factory() as db:
+        db.get(Defect, did).safety_hazard_no = reference
+        db.commit()
+    with peer(monkeypatch) as remote:
+        with ctx.factory() as db:
+            assert retry_pending(db, limit=1) == {'scanned': 1, 'synced': 1, 'failed': 0}
+        assert len(remote.requests) == 1
+    with ctx.factory() as db:
+        assert db.get(Defect, did).safety_hazard_no == 'YH-20261012-0001'
+
+
+def test_good_historical_reference_does_not_starve_recovery_limit(delivery_ctx, monkeypatch):
+    ctx = delivery_ctx
+    good_id = defect(ctx, status='SYNCED')
+    with ctx.factory() as db:
+        db.get(Defect, good_id).safety_hazard_no = 'YH-VALID-OLD'
+        invalid = Defect(defect_no='DF-INVALID-002', equipment_id=ctx.equipment_id,
+                         severity=DefectSeverity.CRITICAL, title='旧假成功', reported_by='delivery',
+                         safety_sync_status='SYNCED', safety_hazard_no='bad\tref')
+        db.add(invalid)
+        db.commit()
+        invalid_id = invalid.id
+    with peer(monkeypatch) as remote:
+        with ctx.factory() as db:
+            assert retry_pending(db, limit=1) == {'scanned': 1, 'synced': 1, 'failed': 0}
+        assert len(remote.requests) == 1 and remote.requests[0]['external_no'] == 'DF-INVALID-002'
+    with ctx.factory() as db:
+        assert db.get(Defect, good_id).safety_sync_attempts == 0
+        assert db.get(Defect, invalid_id).safety_sync_status == 'SYNCED'

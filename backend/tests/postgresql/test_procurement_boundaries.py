@@ -226,3 +226,16 @@ def test_last_quantity_race_and_original_identity_replay(stock_context):
         assert db.get(PurchaseRequest, ctx.purchase_ids[0]).received_qty == Decimal('5')
         assert db.get(SparePart, ctx.part_id).stock_qty == Decimal('15')
         assert db.query(StockMovement).count() == 2
+
+
+@pytest.mark.parametrize('fragment', ['"qty":[1e309]', '"qty":{"x":1e309}',
+                                      '"qty":1,"urgency":1e309',
+                                      '"qty":1,"spare_part_id":1e309'])
+def test_nonfinite_anywhere_in_create_has_422_and_no_writes(stock_context, fragment):
+    ctx = stock_context
+    before = state(ctx)
+    response = ctx.client.post('/api/purchase-requests', content=
+                               '{"spare_part_id":'+str(ctx.part_id)+','+fragment+'}',
+                               headers={'Content-Type': 'application/json'})
+    assert response.status_code == 422, response.text
+    assert state(ctx) == before
