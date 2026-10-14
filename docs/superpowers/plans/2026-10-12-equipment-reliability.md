@@ -89,3 +89,6 @@ Declined-to-judge：现场有效性、容量/性能、真实第三方运行、�
 Important单轮修正后完整设备后端608 passed（SQLite、真实PostgreSQL16、同版本备份客户端、真正两应用2项均执行，无环境跳过）；前端18 passed及TypeScript/Vite构建，ruff/pip check/interview_demo通过。完整命令从backend执行：SCHEDULER_ENABLED=false TEST_POSTGRESQL_URL=<隔离测试库> PG_DUMP=<同版客户端> PG_RESTORE=<同版客户端> SAFETY_PEER_ROOT=<固定接收代码> python -m pytest tests -q。PG超长历史引用夹具已改为真实可发生的超长ACK拒绝，不再把数据库本已阻止的非法状态作为恢复前提。
 
 接收端PR #4已先合并为6f12503f00fdd485a55e737f17d08e8ff8b833f0，候选与main三项CI成功，合并树与本地受测6ff90ca完全一致；设备配对CI固定该实际发布SHA。唯一审查已闭合Important，无复审；三项Minor仍延期。设备候选CI与合并/main CI待执行。
+
+
+CI范围核对：发送双数据库用例位于根tests/test_safety_delivery.py；原PG作业只选tests/postgresql会遗漏它的PG参数。PG作业已显式加入该文件，避免未来只测SQLite。完整本地608已包含该范围，代码未另改，不需要重复完整本地测试；新固定候选需重新通过全部CI。

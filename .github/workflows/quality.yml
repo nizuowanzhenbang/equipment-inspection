@@ -62,7 +62,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-16
       - name: PostgreSQL transaction regression tests
-        run: cd backend && python -m pytest tests/postgresql -q --junitxml=postgresql-results.xml
+        run: cd backend && python -m pytest tests/postgresql tests/test_safety_delivery.py -q --junitxml=postgresql-results.xml
       - name: Preserve PostgreSQL test results
         if: always()
         uses: actions/upload-artifact@v4
