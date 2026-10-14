@@ -42,7 +42,7 @@ Interfaces: mark_pending(db,d) 同缺陷事务；push_one(db,d)->bool；retry_pe
 ### Task 4 · 整批审查与发布
 
 - [x] 接收端 PP-041 按独立计划完成；一次 fresh-context 整批两分支审查与冷恢复，Important 单次 RED→GREEN 修复，无重复审查。
-- [ ] 接收端先发布，发送/采购再发布；固定候选及 main CI 通过；每项真实合并检查点/release/索引和最终摘要回写。
+- [x] 接收端先发布，发送/采购再发布；固定候选及 main CI 通过；每项真实合并检查点/release/索引和最终摘要回写。
 
 ## 执行台账
 
@@ -92,3 +92,10 @@ Important单轮修正后完整设备后端608 passed（SQLite、真实PostgreSQL
 
 
 CI范围核对：发送双数据库用例位于根tests/test_safety_delivery.py；原PG作业只选tests/postgresql会遗漏它的PG参数。PG作业已显式加入该文件，避免未来只测SQLite。完整本地608已包含该范围，代码未另改，不需要重复完整本地测试；新固定候选需重新通过全部CI。
+
+
+## 发布签收
+
+最终候选3211e6602915483b479d1d638ada80af6b87f6a8的backend/postgresql（含根目录发送PG参数）/frontend/safety_contract/compose-browser均通过，质量CI38628696787、Compose38628696609。PR #15按固定SHA合并为2312540c6d4c85ac0b921100937476067f87a506，合并树与完整608通过的业务代码一致；[main质量CI38629494445](https://github.com/nizuowanzhenbang/equipment-inspection/actions/runs/38629494445)四项成功，[main Compose38629717040](https://github.com/nizuowanzhenbang/equipment-inspection/actions/runs/38629717040)成功（该工作流仅PR/手动触发，已实际在合并main发起）。接收PR #4已先发布。
+
+中央按PP-030和PP-040分别保存真实merged/release，RELEASES索引指向同一实际PR #15合并SHA；设备/安全完整本地608/119通过（安全1刻意PG跳过）、前端18、接续25及全部边界/延期见smart-power-plant/progress/evidence/2026-10-14-procurement-safety.md。源代码发布、台账和本计划文档签收SHA分别保留。后续PP-050只读准备不算映射/适配能力交付，三项Minor保持待做。
