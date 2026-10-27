@@ -143,3 +143,28 @@ test('another tab switching account blocks confirmation from the stale account',
   expect(Number((await (await request.get(`/api/spare-parts/${part.id}`, { headers })).json()).data.stock_qty)).toBe(10)
   expect((await (await request.get(`/api/spare-parts/${part.id}/movements`, { headers })).json()).data.items).toHaveLength(0)
 })
+
+test('remaining purchase quantity is explicit in list and detail after partial and full receipt', async ({ page, request }) => {
+  const { headers, name, purchase } = await prepareReceipt(page, request)
+  const receive = async (quantity: number) => {
+    const response = await request.post(`/api/purchase-requests/${purchase.id}/receive`, {
+      headers, data: { received_qty: quantity, request_id: randomUUID() },
+    })
+    expect(response.status()).toBe(200)
+  }
+  await receive(2.01)
+  await page.reload()
+  const row = page.getByRole('row').filter({ hasText: name })
+  await expect(page.getByRole('columnheader', { name: '剩余待收数量', exact: true })).toBeVisible()
+  await expect(row.getByRole('cell', { name: '2.99', exact: true })).toBeVisible()
+  await row.getByRole('button', { name: /^详\s*情$/ }).click()
+  const detailRemaining = page.locator('.ant-descriptions-row').filter({
+    has: page.getByText('剩余待收数量', { exact: true }),
+  })
+  await expect(detailRemaining.getByText('2.99', { exact: true })).toBeVisible()
+  await receive(2.99)
+  await page.reload()
+  await expect(row.getByRole('cell', { name: '0.00', exact: true })).toBeVisible()
+  await row.getByRole('button', { name: /^详\s*情$/ }).click()
+  await expect(detailRemaining.getByText('0.00', { exact: true })).toBeVisible()
+})
