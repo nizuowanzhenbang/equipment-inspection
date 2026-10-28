@@ -18,6 +18,9 @@ import { loadReceiptAttempt, getReceiptAttempt, clearReceiptAttempt, discardRece
 import type { ReceiptAttempt } from '../utils/receiptAttempt'
 import { useAuthStore, canSupervise, canWrite } from '../stores/auth'
 
+const remainingQuantity = (request: PurchaseRequest) =>
+  Math.max(0, Number(request.qty) - Number(request.received_qty ?? 0)).toFixed(2)
+
 export default function PurchaseRequestList() {
   const username = useAuthStore((s) => s.username)
   const token = useAuthStore((s) => s.token)
@@ -206,6 +209,7 @@ export default function PurchaseRequestList() {
           { title: '申请单号', dataIndex: 'pr_no', width: 170 },
           { title: '备件', render: (_: any, r: PurchaseRequest) => `${r.spare_part_code} · ${r.spare_part_name}` },
           { title: '数量', dataIndex: 'qty', width: 80 },
+          { title: '剩余待收数量', width: 120, render: (_: any, r: PurchaseRequest) => remainingQuantity(r) },
           { title: '预估金额', dataIndex: 'estimated_amount', width: 110,
             render: (v) => v ? `¥ ${Number(v).toFixed(2)}` : '-' },
           { title: '紧急度', dataIndex: 'urgency', width: 100,
@@ -267,6 +271,7 @@ export default function PurchaseRequestList() {
               <Descriptions.Item label="推送时间">{detail.sent_at ? dayjs(detail.sent_at).format('YYYY-MM-DD HH:mm') : '-'}</Descriptions.Item>
               <Descriptions.Item label="外部订单号">{detail.external_order_no || '-'}</Descriptions.Item>
               <Descriptions.Item label="已到货">{detail.received_qty || 0} / {detail.qty}</Descriptions.Item>
+              <Descriptions.Item label="剩余待收数量">{remainingQuantity(detail)}</Descriptions.Item>
               <Descriptions.Item label="申请理由" span={2}>{detail.reason || '-'}</Descriptions.Item>
               {detail.rejected_reason && (
                 <Descriptions.Item label="驳回原因" span={2}>{detail.rejected_reason}</Descriptions.Item>
