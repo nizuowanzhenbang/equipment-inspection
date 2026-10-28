@@ -58,6 +58,7 @@ class DefectResponse(BaseModel):
     safety_hazard_no: Optional[str] = None
     safety_sync_at: Optional[datetime] = None
     safety_sync_attempts: int = 0
+    safety_sync_error: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)

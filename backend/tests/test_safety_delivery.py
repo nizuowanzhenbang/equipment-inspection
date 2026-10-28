@@ -301,3 +301,17 @@ def test_good_historical_reference_does_not_starve_recovery_limit(delivery_ctx, 
     with ctx.factory() as db:
         assert db.get(Defect, good_id).safety_sync_attempts == 0
         assert db.get(Defect, invalid_id).safety_sync_status == 'SYNCED'
+
+
+@pytest.mark.parametrize('status,reason', [('SKIPPED', 'SAFETY_SYSTEM_URL 未配置'), ('FAILED', '网络请求失败（ConnectError）'), ('SYNCED', None)])
+def test_daily_defect_reads_preserve_saved_sync_reason(delivery_ctx, status, reason):
+    ctx = delivery_ctx
+    did = defect(ctx, status=status)
+    with ctx.factory() as db:
+        db.get(Defect, did).safety_sync_error = reason
+        db.commit()
+    detail = ctx.client.get(f'/api/defects/{did}')
+    listing = ctx.client.get('/api/defects')
+    assert detail.status_code == listing.status_code == 200
+    assert detail.json()['data']['safety_sync_error'] == reason
+    assert listing.json()['data']['items'][0]['safety_sync_error'] == reason

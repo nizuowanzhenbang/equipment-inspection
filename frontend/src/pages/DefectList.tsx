@@ -146,7 +146,14 @@ export default function DefectList() {
           { title: 'SLA 截止', dataIndex: 'sla_deadline', width: 140,
             render: (v) => v ? dayjs(v).format('MM-DD HH:mm') : '-' },
           { title: '上报时间', dataIndex: 'reported_at', width: 140, render: (v) => dayjs(v).format('MM-DD HH:mm') },
-          { title: '隐患联动', width: 160, render: (_: any, r: Defect) => syncTag(r) },
+          { title: '隐患联动', width: 220, render: (_: any, r: Defect) => (
+            <Space direction="vertical" size={2}>
+              {syncTag(r)}
+              {r.safety_sync_error && ['FAILED', 'SKIPPED'].includes(r.safety_sync_status || '') && (
+                <span style={{ overflowWrap: 'anywhere' }}>{r.safety_sync_error}</span>
+              )}
+            </Space>
+          ) },
           {
             title: '操作', width: 260, fixed: 'right' as const,
             render: (_: any, r: Defect) => (
